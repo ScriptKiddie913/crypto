@@ -14,12 +14,11 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
   const simulationRef = useRef<d3.Simulation<any, undefined> | null>(null);
 
   useEffect(() => {
-    if (!svgRef.current || nodes.length === 0) return;
-
-    const width = svgRef.current.clientWidth;
-    const height = svgRef.current.clientHeight;
+    if (!svgRef.current) return;
     const svg = d3.select(svgRef.current);
-    
+    const width = svgRef.current.clientWidth || 800;
+    const height = svgRef.current.clientHeight || 600;
+
     let g = svg.select<SVGGElement>("g.main-container");
     if (g.empty()) {
       g = svg.append("g").attr("class", "main-container");
@@ -32,33 +31,40 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
     }
 
     let linkLayer = g.select<SVGGElement>("g.links");
-    if (linkLayer.empty()) linkLayer = g.append("g").attr("class", "links").attr("stroke-opacity", 0.3);
+    if (linkLayer.empty()) linkLayer = g.append("g").attr("class", "links").attr("stroke-opacity", 0.4);
 
     let nodeLayer = g.select<SVGGElement>("g.nodes");
     if (nodeLayer.empty()) nodeLayer = g.append("g").attr("class", "nodes");
 
+    // Initialize or Update Simulation
     if (!simulationRef.current) {
       simulationRef.current = d3.forceSimulation<any>()
-        .force("link", d3.forceLink<any, any>().id((d: any) => d.id).distance(200))
-        .force("charge", d3.forceManyBody().strength(-2000))
+        .force("link", d3.forceLink<any, any>().id((d: any) => d.id).distance(180))
+        .force("charge", d3.forceManyBody().strength(-1500))
         .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collision", d3.forceCollide().radius(100));
+        .force("collision", d3.forceCollide().radius(80));
     }
 
     const simulation = simulationRef.current;
-    simulation.nodes(nodes);
+    
+    // Crucial: Create deep copies of nodes/links to prevent D3 internal mutations 
+    // from conflicting with React's immutability principles in subsequent renders
+    const nodesCopy = nodes.map(d => ({ ...d }));
+    const linksCopy = links.map(d => ({ ...d }));
+
+    simulation.nodes(nodesCopy);
     const linkForce = simulation.force("link") as d3.ForceLink<any, any>;
-    linkForce.links(links);
+    linkForce.links(linksCopy);
 
     const link = linkLayer.selectAll<SVGLineElement, any>("line")
-      .data(links, (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`)
+      .data(linksCopy, (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`)
       .join("line")
       .attr("stroke", "#1e293b")
       .attr("stroke-width", 2)
-      .attr("opacity", 0.5);
+      .attr("stroke-dasharray", (d: any) => d.value > 1 ? "4 2" : null);
 
-    const node = nodeLayer.selectAll<SVGGElement, NodeData>("g.node")
-      .data(nodes, d => d.id)
+    const node = nodeLayer.selectAll<SVGGElement, any>("g.node")
+      .data(nodesCopy, d => d.id)
       .join(
         enter => {
           const gEnter = enter.append("g")
@@ -66,7 +72,9 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
             .style("cursor", "crosshair")
             .on("click", (event, d) => {
               if (event.defaultPrevented) return;
-              onNodeClick(d);
+              // Map back to original node data for the callback
+              const original = nodes.find(n => n.id === d.id);
+              if (original) onNodeClick(original);
             })
             .call(d3.drag<any, any>()
               .on("start", (event, d) => {
@@ -86,14 +94,13 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
 
           gEnter.append("circle")
             .attr("class", "glow")
-            .attr("r", 42)
+            .attr("r", 40)
             .attr("fill", "transparent")
-            .attr("stroke-width", 2)
-            .attr("stroke", "transparent");
+            .attr("stroke-width", 2);
 
           gEnter.append("circle")
             .attr("class", "main-circle")
-            .attr("r", 30)
+            .attr("r", 28)
             .attr("fill", d => {
               if (d.type === 'address') return '#0284c7';
               if (d.type === 'eth_address') return '#7c3aed';
@@ -105,10 +112,10 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
             .attr("stroke-width", 2);
 
           gEnter.append("text")
-            .attr("dy", 50)
+            .attr("dy", 48)
             .attr("text-anchor", "middle")
             .attr("fill", "#cbd5e1")
-            .attr("font-size", "11px")
+            .attr("font-size", "10px")
             .attr("font-weight", "600")
             .attr("font-family", "'JetBrains Mono', monospace")
             .text(d => d.label);
@@ -118,13 +125,14 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
         update => update
       );
 
+    // Update selection indicators
     node.select("circle.glow")
       .attr("stroke", d => d.id === selectedNodeId ? "rgba(16, 185, 129, 0.4)" : "transparent")
       .attr("stroke-dasharray", d => d.id === selectedNodeId ? "4 4" : null);
 
     node.select("circle.main-circle")
       .attr("stroke", d => d.id === selectedNodeId ? "#10b981" : "#020408")
-      .attr("stroke-width", d => d.id === selectedNodeId ? 5 : 2);
+      .attr("stroke-width", d => d.id === selectedNodeId ? 4 : 2);
 
     simulation.on("tick", () => {
       link
@@ -136,7 +144,7 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
       node.attr("transform", d => `translate(${d.x},${d.y})`);
     });
 
-    simulation.alpha(0.6).restart();
+    simulation.alpha(1).restart();
 
   }, [nodes, links, onNodeClick, selectedNodeId]);
 

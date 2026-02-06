@@ -15,7 +15,6 @@ interface Props {
   selectedNodeId?: string;
 }
 
-// Forensic Icons - Refined for stroke-based neon rendering
 const ICONS = {
   ROOT: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
   WALLET: "M19,7H5C3.89,7,3,7.89,3,9v10c0,1.1,0.89,2,2,2h14c1.1,0,2-0.9,2-2V9C21,7.89,20.11,7,19,7z M19,19H5V9h14V19z M17,12h-2v2h2V12z",
@@ -40,35 +39,32 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
     if (defs.empty()) {
       defs = svg.append("defs");
       
-      const createNeonFilter = (id: string, color: string) => {
+      const createNeonFilter = (id: string, color: string, deviation: number = 3) => {
         const filter = defs.append("filter")
           .attr("id", id)
-          .attr("x", "-100%")
-          .attr("y", "-100%")
-          .attr("width", "300%")
-          .attr("height", "300%");
-        filter.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", "6").attr("result", "blur6");
-        filter.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", "3").attr("result", "blur3");
-        filter.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", "1").attr("result", "blur1");
+          .attr("x", "-50%")
+          .attr("y", "-50%")
+          .attr("width", "200%")
+          .attr("height", "200%");
+        filter.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", deviation).attr("result", "blur");
         const merge = filter.append("feMerge");
-        merge.append("feMergeNode").attr("in", "blur6");
-        merge.append("feMergeNode").attr("in", "blur3");
-        merge.append("feMergeNode").attr("in", "blur1");
+        merge.append("feMergeNode").attr("in", "blur");
         merge.append("feMergeNode").attr("in", "SourceGraphic");
       };
 
-      createNeonFilter("backlit-root", "#f97316");
-      createNeonFilter("backlit-address", "#38bdf8");
-      createNeonFilter("backlit-eth", "#c084fc");
-      createNeonFilter("backlit-tx", "#34d399");
-      createNeonFilter("backlit-default", "#fcd34d");
+      createNeonFilter("backlit-root", "#f97316", 4);
+      createNeonFilter("backlit-address", "#38bdf8", 4);
+      createNeonFilter("backlit-eth", "#c084fc", 4);
+      createNeonFilter("backlit-tx", "#34d399", 4);
+      createNeonFilter("backlit-default", "#fcd34d", 4);
+      createNeonFilter("backlit-line", "#cbd5e1", 2); 
     }
 
     let g = svg.select<SVGGElement>("g.main-container");
     if (g.empty()) {
       g = svg.append("g").attr("class", "main-container");
       const zoom = d3.zoom<SVGSVGElement, unknown>()
-        .scaleExtent([0.1, 8])
+        .scaleExtent([0.05, 10])
         .on("zoom", (event) => {
           g.attr("transform", event.transform);
         });
@@ -76,25 +72,41 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
     }
 
     let linkLayer = g.select<SVGGElement>("g.links");
-    if (linkLayer.empty()) linkLayer = g.append("g").attr("class", "links").attr("stroke-opacity", 1.0);
+    if (linkLayer.empty()) {
+      linkLayer = g.append("g")
+        .attr("class", "links")
+        .attr("stroke-opacity", 1.0)
+        .style("pointer-events", "none");
+    }
 
     let nodeLayer = g.select<SVGGElement>("g.nodes");
     if (nodeLayer.empty()) nodeLayer = g.append("g").attr("class", "nodes");
 
     if (!simulationRef.current) {
       simulationRef.current = d3.forceSimulation<D3Node>()
-        .force("link", d3.forceLink<D3Node, D3Link>().id((d: D3Node) => d.id).distance(220))
-        .force("charge", d3.forceManyBody().strength(-2000))
+        .force("link", d3.forceLink<D3Node, D3Link>().id((d: D3Node) => d.id).distance(240))
+        .force("charge", d3.forceManyBody().strength(-2500))
         .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collision", d3.forceCollide().radius(120));
+        .force("collision", d3.forceCollide().radius(130));
     }
 
     const simulation = simulationRef.current;
+    
+    // Efficiently handle node additions/removals
+    const currentNodes = simulation.nodes();
+    const nodeMap = new Map(currentNodes.map(n => [n.id, n]));
+    
     const nodesCopy: D3Node[] = nodes.map(d => {
-      const existing = simulation.nodes().find(ex => ex.id === d.id);
+      const existing = nodeMap.get(d.id);
       return existing ? { ...d, x: existing.x, y: existing.y, vx: existing.vx, vy: existing.vy, fx: existing.fx, fy: existing.fy } : { ...d };
     });
-    const linksCopy: D3Link[] = links.map(d => ({ source: d.source, target: d.target, value: d.value, label: d.label }));
+    
+    const linksCopy: D3Link[] = links.map(d => ({ 
+      source: d.source, 
+      target: d.target, 
+      value: d.value, 
+      label: d.label 
+    }));
 
     simulation.nodes(nodesCopy);
     (simulation.force("link") as d3.ForceLink<D3Node, D3Link>).links(linksCopy);
@@ -102,9 +114,11 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
     const link = linkLayer.selectAll<SVGLineElement, D3Link>("line")
       .data(linksCopy, (d: any) => `${d.source.id || d.source}-${d.target.id || d.target}`)
       .join("line")
-      .attr("stroke", "#94a3b8") // Brighter slate for high visibility
-      .attr("stroke-width", 2.0) // Thicker line
-      .attr("stroke-dasharray", "5 5");
+      .attr("stroke", "#e2e8f0") 
+      .attr("stroke-width", 1.5)
+      .attr("stroke-dasharray", "4,4") // Dotted/Dashed lines as requested
+      .attr("filter", "url(#backlit-line)")
+      .attr("shape-rendering", "optimizeSpeed");
 
     const getNodeColor = (d: NodeData) => {
       if (d.isRoot) return '#f97316'; 
@@ -142,7 +156,7 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
             .on("mouseout", () => setHoveredNode(null))
             .call(d3.drag<any, D3Node>()
               .on("start", (event, d) => {
-                if (!event.active) simulation.alphaTarget(0.1).restart();
+                if (!event.active) simulation.alphaTarget(0.2).restart();
                 d.fx = d.x; d.fy = d.y;
               })
               .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
@@ -151,7 +165,6 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
                 d.fx = null; d.fy = null;
               }));
 
-          // Static Red Selection Ring
           gEnter.append("circle")
             .attr("class", "selection-ring")
             .attr("r", 44)
@@ -161,14 +174,12 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
             .style("opacity", 0)
             .style("pointer-events", "none");
 
-          // Outer Halo
           gEnter.append("circle")
             .attr("class", "halo")
             .attr("r", 36)
             .attr("fill", "transparent")
             .attr("stroke-width", 3);
 
-          // Core
           gEnter.append("circle")
             .attr("class", "core-glass")
             .attr("r", 28)
@@ -176,7 +187,6 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
             .attr("stroke", "rgba(255,255,255,0.05)")
             .attr("stroke-width", 1);
 
-          // Icon
           gEnter.append("path")
             .attr("class", "neon-icon")
             .attr("d", d => {
@@ -195,10 +205,11 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
           gEnter.append("text")
             .attr("dy", 55)
             .attr("text-anchor", "middle")
-            .attr("fill", "#64748b")
+            .attr("fill", "#94a3b8")
             .attr("font-size", "10px")
             .attr("font-weight", "800")
             .attr("font-family", "'JetBrains Mono', monospace")
+            .style("pointer-events", "none")
             .text(d => d.label);
 
           return gEnter;
@@ -206,39 +217,40 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
       );
 
     node.select("circle.selection-ring")
-      .transition().duration(200)
       .style("opacity", d => d.id === selectedNodeId ? 1 : 0);
 
     node.select("circle.halo")
       .attr("stroke", d => getNodeColor(d))
       .attr("filter", d => getNodeFilter(d))
-      .attr("stroke-opacity", 0.6);
+      .attr("stroke-opacity", 0.7);
 
     node.select("path.neon-icon")
       .attr("stroke", d => getNodeColor(d))
       .attr("filter", d => getNodeFilter(d));
 
     simulation.on("tick", () => {
-      link.attr("x1", (d: any) => d.source.x).attr("y1", (d: any) => d.source.y)
-          .attr("x2", (d: any) => d.target.x).attr("y2", (d: any) => d.target.y);
+      link.attr("x1", (d: any) => d.source.x)
+          .attr("y1", (d: any) => d.source.y)
+          .attr("x2", (d: any) => d.target.x)
+          .attr("y2", (d: any) => d.target.y);
+          
       node.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
     });
 
-    simulation.alpha(0.3).restart();
+    simulation.alpha(0.5).restart();
   }, [nodes, links, onNodeClick, selectedNodeId]);
 
   return (
     <div className="w-full h-full bg-[#020408] relative overflow-hidden">
-      <svg ref={svgRef} className="w-full h-full" />
+      <svg ref={svgRef} className="w-full h-full" style={{ imageRendering: 'auto' }} />
       
-      {/* Compact Legend in bottom-left corner */}
       <div className="absolute bottom-6 left-6 flex flex-col gap-4 bg-[#05070c]/90 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/5 pointer-events-none shadow-2xl z-20">
-        <h4 className="text-[8px] font-black text-slate-500 uppercase tracking-[0.5em] mb-2 leading-none opacity-80">I N V E S T I G A T I O N _ C O R E</h4>
+        <h4 className="text-[8px] font-black text-slate-500 uppercase tracking-[0.5em] mb-2 leading-none opacity-80">I N D E X</h4>
         <div className="space-y-4">
-          <LegendItem icon={ICONS.ROOT} color="#f97316" label="INITIAL QUERY" shadow="0 0 10px rgba(249,115,22,0.3)" />
-          <LegendItem icon={ICONS.WALLET} color="#38bdf8" label="WALLET" shadow="0 0 10px rgba(56,189,248,0.3)" />
-          <LegendItem icon={ICONS.TX} color="#34d399" label="TX" shadow="0 0 10px rgba(52,211,153,0.3)" />
-          <LegendItem icon={ICONS.EVM} color="#c084fc" label="EVM" shadow="0 0 10px rgba(192,132,252,0.3)" />
+          <LegendItem icon={ICONS.ROOT} color="#f97316" label="INITIAL QUERY" shadow="0 0 12px rgba(249,115,22,0.4)" />
+          <LegendItem icon={ICONS.WALLET} color="#38bdf8" label="WALLET" shadow="0 0 12px rgba(56,189,248,0.4)" />
+          <LegendItem icon={ICONS.TX} color="#34d399" label="TX" shadow="0 0 12px rgba(52,211,153,0.4)" />
+          <LegendItem icon={ICONS.EVM} color="#c084fc" label="EVM" shadow="0 0 12px rgba(192,132,252,0.4)" />
         </div>
       </div>
 

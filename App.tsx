@@ -8,6 +8,7 @@ import {
   Zap,
   FileText,
   Box,
+  Trash2,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { blockchainService } from './services/blockchainService';
@@ -44,6 +45,27 @@ const App: React.FC = () => {
     setLinks(prev => [...prev, link]);
     return true;
   }, []);
+
+  const deleteNode = useCallback((nodeId: string) => {
+    // Remove from active state
+    setNodes(prev => prev.filter(n => n.id !== nodeId));
+    setLinks(prev => prev.filter(l => l.source !== nodeId && l.target !== nodeId));
+    
+    // Clear from tracking refs to allow re-addition/clean logic
+    seenNodes.current.delete(nodeId);
+    
+    // Clear links from tracking refs
+    const linksToRemove = Array.from(seenLinks.current).filter(id => id.includes(nodeId));
+    linksToRemove.forEach(id => seenLinks.current.delete(id));
+    
+    // Clear expansion history for this node
+    const expansionsToRemove = Array.from(expandedNodes.current).filter(key => key.startsWith(nodeId));
+    expansionsToRemove.forEach(key => expandedNodes.current.delete(key));
+
+    if (selectedNode?.id === nodeId) {
+      setSelectedNode(null);
+    }
+  }, [selectedNode]);
 
   const resetGraph = () => {
     setNodes([]);
@@ -120,6 +142,9 @@ const App: React.FC = () => {
         const branchLimit = force ? 40 : (currentDepth === 0 ? 30 : 10);
         
         for (const tx of txs.slice(0, branchLimit)) {
+          // Double check if the parent node still exists before expanding
+          if (!seenNodes.current.has(nodeId)) break;
+
           const totalOut = (tx.vout || []).reduce((sum, v) => sum + (v.value || 0), 0);
           const amt = isEth ? (totalOut / 1e18).toFixed(4) : (totalOut / 1e8).toFixed(4);
           
@@ -155,6 +180,8 @@ const App: React.FC = () => {
 
         const outputs = txData.vout.slice(0, force ? 30 : 15);
         for (const output of outputs) {
+          if (!seenNodes.current.has(nodeId)) break;
+
           const addr = output.scriptpubkey_address;
           if (addr && addr !== nodeId) {
             const outAmt = isEth ? (output.value / 1e18).toFixed(6) : (output.value / 1e8).toFixed(6);
@@ -286,6 +313,7 @@ const App: React.FC = () => {
   };
 
   const generateReport = () => {
+    // Only includes currently visible nodes
     if (nodes.length === 0) return;
     const doc = new jsPDF();
     const caseId = `SOT-${Math.floor(Date.now() / 1000)}`;
@@ -463,6 +491,17 @@ const App: React.FC = () => {
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Workspace Operations: Delete Button */}
+                <div className="pt-8 border-t border-white/5">
+                   <button 
+                    onClick={() => deleteNode(selectedNode.id)}
+                    className="w-full h-14 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-2xl flex items-center justify-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-rose-500/20 transition-all"
+                   >
+                     <Trash2 size={16} />
+                     Delete from Workspace
+                   </button>
                 </div>
               </div>
             </div>

@@ -142,7 +142,6 @@ const App: React.FC = () => {
         const branchLimit = force ? 40 : (currentDepth === 0 ? 30 : 10);
         
         for (const tx of txs.slice(0, branchLimit)) {
-          // Double check if the parent node still exists before expanding
           if (!seenNodes.current.has(nodeId)) break;
 
           const totalOut = (tx.vout || []).reduce((sum, v) => sum + (v.value || 0), 0);
@@ -269,7 +268,8 @@ const App: React.FC = () => {
 
         addNode(root);
         setSelectedNode(root);
-        await expandNode(searchVal, root.type, 1, 0);
+        // Change depth to 2 to show TXs AND their wallets immediately
+        await expandNode(searchVal, root.type, 2, 0);
       } else if (type === SearchType.TX) {
         const txData = await blockchainService.getTransaction(searchVal);
         const isEth = searchVal.startsWith('0x');
@@ -296,6 +296,7 @@ const App: React.FC = () => {
 
         addNode(root);
         setSelectedNode(root); 
+        // Show the TX and the wallets involved (Depth 1 is enough for TX -> Wallets)
         await expandNode(searchVal, 'transaction', 1, 0);
       }
     } catch (err: any) {
@@ -313,7 +314,6 @@ const App: React.FC = () => {
   };
 
   const generateReport = () => {
-    // Only includes currently visible nodes
     if (nodes.length === 0) return;
     const doc = new jsPDF();
     const caseId = `SOT-${Math.floor(Date.now() / 1000)}`;

@@ -1,4 +1,3 @@
-
 import { AddressInfo, Transaction, SearchType } from '../types';
 
 const BTC_PROVIDERS = [
@@ -20,7 +19,6 @@ const fetchWithFallback = async (endpoint: string, options: RequestInit = {}, ti
       if (isBlockcypher) {
         if (endpoint.startsWith('/address/')) {
           const addr = endpoint.split('/')[2];
-          // Increased Blockcypher limit to 50
           finalUrl = endpoint.endsWith('/txs') 
             ? `${base}/addrs/${addr}/full?limit=50` 
             : `${base}/addrs/${addr}/balance`;
@@ -126,7 +124,13 @@ export const blockchainService = {
           const raw = await res.json();
           return {
             address: raw.hash,
-            chain_stats: { funded_txo_sum: parseFloat(raw.coin_balance || "0"), spent_txo_sum: 0, tx_count: 0, funded_txo_count: 0, spent_txo_count: 0 }
+            chain_stats: { 
+              funded_txo_sum: parseFloat(raw.coin_balance || "0"), 
+              spent_txo_sum: 0, 
+              tx_count: 0, 
+              funded_txo_count: 0, 
+              spent_txo_count: 0 
+            }
           } as any;
         }
       } catch(e) {}
@@ -157,7 +161,6 @@ export const blockchainService = {
     const isEth = /^0x[a-fA-F0-9]{40}$/i.test(address);
     if (isEth) {
       try {
-        // Increased limit for ETH transactions
         const res = await fetch(`https://eth.blockscout.com/api/v2/addresses/${address}/transactions?limit=50`);
         if (res.ok) {
           const raw = await res.json();
@@ -174,7 +177,6 @@ export const blockchainService = {
     try {
       return await fetchWithFallback(`/address/${address}/txs`);
     } catch (e) {
-      // Increased limit for Blockchain.info transactions
       const res = await fetch(`https://blockchain.info/rawaddr/${address}?cors=true&limit=50`);
       if (res.ok) {
         const raw = await res.json();
@@ -191,6 +193,23 @@ export const blockchainService = {
   },
 
   async getTransaction(txid: string): Promise<Transaction> {
+    const isEth = /^0x[0-9a-fA-F]{64}$/i.test(txid);
+    if (isEth) {
+      try {
+        const res = await fetch(`https://eth.blockscout.com/api/v2/transactions/${txid}`);
+        if (res.ok) {
+          const t = await res.json();
+          return {
+            txid: t.hash,
+            fee: parseFloat(t.fee?.value || "0"),
+            status: { confirmed: !!t.block, block_height: t.block, block_time: t.timestamp ? new Date(t.timestamp).getTime()/1000 : undefined },
+            vin: [{ prevout: { scriptpubkey_address: t.from?.hash, value: parseFloat(t.value || "0") } }],
+            vout: [{ scriptpubkey_address: t.to?.hash, value: parseFloat(t.value || "0") }]
+          } as any;
+        }
+      } catch(e) {}
+    }
+
     try {
       return await fetchWithFallback(`/tx/${txid}`);
     } catch (e) {
@@ -205,7 +224,7 @@ export const blockchainService = {
           vout: (t.out || []).map((o: any) => ({ scriptpubkey_address: o.addr, value: o.value }))
         } as any;
       }
-      throw new Error("Transaction trace lost.");
+      throw new Error("Transaction trace lost. Network might be unstable.");
     }
   },
 

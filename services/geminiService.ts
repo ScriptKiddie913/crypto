@@ -1,3 +1,3 @@
-export const dataService = {
-  checkData: () => null
+export const cleanService = {
+  active: true
 };

@@ -17,15 +17,11 @@ import {
   Box,
   ChevronRight,
   Layers,
-  CircleDollarSign,
-  History,
   Layout,
   Fingerprint,
   TrendingUp,
   ArrowRightCircle,
-  ArrowLeftCircle,
-  Hash,
-  Cat
+  ArrowLeftCircle
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { blockchainService } from './services/blockchainService';
@@ -103,11 +99,6 @@ const App: React.FC = () => {
       else if (node.details.ops_count > 1000) score += 10;
     }
 
-    if (node.details?.privacy_score) {
-      const pScore = parseInt(node.details.privacy_score);
-      if (pScore < 30) score += 30;
-    }
-
     const highValueRegistry = ['1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo', 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh'];
     if (highValueRegistry.includes(node.id)) score = Math.max(score, 90);
 
@@ -123,7 +114,9 @@ const App: React.FC = () => {
     try {
       if (type === 'address' || type === 'eth_address') {
         const txs = await blockchainService.getAddressTxs(nodeId);
-        for (const tx of txs.slice(0, 8)) {
+        if (!txs || txs.length === 0) return;
+
+        for (const tx of txs.slice(0, 10)) {
           const totalOut = (tx.vout || []).reduce((sum, v) => sum + (v.value || 0), 0);
           const amt = isEth ? (totalOut / 1e18).toFixed(4) : (totalOut / 1e8).toFixed(4);
           
@@ -133,7 +126,7 @@ const App: React.FC = () => {
           const txNode: NodeData = {
             id: tx.txid,
             type: 'transaction',
-            label: `TX: ${tx.txid.substring(0, 4)} [${amt} ${unit}]`,
+            label: `TX: ${tx.txid.substring(0, 4)}`,
             details: {
               identifier: tx.txid,
               status: tx.status?.confirmed ? "Confirmed" : "Mempool",
@@ -151,13 +144,18 @@ const App: React.FC = () => {
 
           if (addNode(txNode)) {
              addLink({ source: nodeId, target: txNode.id, value: 2 });
-             await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1);
+             // Automatic expansion only for the first level to avoid infinite depth loops
+             if (currentDepth < 1) {
+               await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1);
+             }
           }
-          await sleep(50);
+          await sleep(20);
         }
       } else if (type === 'transaction') {
         const txData = await blockchainService.getTransaction(nodeId);
-        const outputs = (txData.vout || []).slice(0, 5);
+        if (!txData || !txData.vout) return;
+
+        const outputs = txData.vout.slice(0, 6);
         for (const output of outputs) {
           const addr = output.scriptpubkey_address;
           if (addr && addr !== nodeId) {
@@ -181,14 +179,13 @@ const App: React.FC = () => {
 
             if (addNode(outNode)) {
                addLink({ source: nodeId, target: outNode.id, value: 1 });
-               await expandNode(addr, outNode.type, maxDepth, currentDepth + 1);
             }
-            await sleep(50);
+            await sleep(20);
           }
         }
       }
     } catch (err: any) {
-      console.warn("Deeper resolution aborted:", err.message);
+      console.warn("Expansion depth issue:", err.message);
     }
   };
 
@@ -201,19 +198,35 @@ const App: React.FC = () => {
 
     try {
       const type = blockchainService.detectSearchType(searchVal);
+      if (type === SearchType.UNKNOWN) {
+        throw new Error("Target identifier format is not recognized.");
+      }
+
+      // Root initialization
+      const initialNode: NodeData = {
+        id: searchVal,
+        type: type === SearchType.ETH_ADDRESS ? 'eth_address' : type === SearchType.TX ? 'transaction' : 'address',
+        label: `${searchVal.substring(0, 8)}...`,
+        details: { identifier: searchVal, status: "Tracing..." }
+      };
+      addNode(initialNode);
+      setSelectedNode(initialNode);
+
       if (type === SearchType.ADDRESS || type === SearchType.ETH_ADDRESS) {
         const isEth = type === SearchType.ETH_ADDRESS;
         const [addrData, clustering] = await Promise.all([
-            blockchainService.getAddress(searchVal),
-            blockchainService.getClusteringHints(searchVal, isEth)
+            blockchainService.getAddress(searchVal).catch(() => ({ chain_stats: { funded_txo_sum: 0, spent_txo_sum: 0, tx_count: 0 } })),
+            blockchainService.getClusteringHints(searchVal, isEth).catch(() => null)
         ]);
+        
         const unit = isEth ? 'ETH' : 'BTC';
         const balance = isEth 
             ? (addrData.chain_stats.funded_txo_sum / 1e18) 
             : ((addrData.chain_stats.funded_txo_sum - addrData.chain_stats.spent_txo_sum) / 1e8);
             
         const root: NodeData = { 
-          id: searchVal, type, 
+          id: searchVal, 
+          type: isEth ? 'eth_address' : 'address', 
           label: (clustering?.clustering_label && clustering.clustering_label !== 'Indeterminate') ? clustering.clustering_label : `${searchVal.substring(0, 8)}...`, 
           details: { 
             identifier: searchVal, 
@@ -227,9 +240,9 @@ const App: React.FC = () => {
         root.riskScore = calculateRisk(root);
         root.details.risk_score = `${root.riskScore}%`;
 
-        addNode(root); 
-        setSelectedNode(root); 
-        await expandNode(searchVal, type, 1, 0);
+        setNodes(prev => prev.map(n => n.id === searchVal ? root : n));
+        setSelectedNode(root);
+        await expandNode(searchVal, root.type, 1, 0);
       } else if (type === SearchType.TX) {
         const txData = await blockchainService.getTransaction(searchVal);
         const isEth = searchVal.startsWith('0x');
@@ -237,12 +250,13 @@ const App: React.FC = () => {
         const amt = isEth ? ((txData.vout?.[0]?.value || 0) / 1e18).toFixed(4) : ((txData.vout?.reduce((s,v) => s+v.value, 0) || 0) / 1e8).toFixed(4);
 
         const root: NodeData = { 
-          id: searchVal, type: 'transaction', 
+          id: searchVal, 
+          type: 'transaction', 
           label: `TX: ${searchVal.substring(0, 8)}`, 
           details: { 
             identifier: searchVal, 
             status: txData.status.confirmed ? "Confirmed" : "Mempool",
-            transaction_amount: `${amt} ${unit}`,
+            amount: `${amt} ${unit}`,
             sender: txData.vin?.[0]?.prevout?.scriptpubkey_address || "Mined/Unknown",
             receiver: txData.vout?.[0]?.scriptpubkey_address || "Unknown",
             output_count: txData.vout?.length || 0,
@@ -253,14 +267,12 @@ const App: React.FC = () => {
         root.riskScore = calculateRisk(root);
         root.details.risk_score = `${root.riskScore}%`;
 
-        addNode(root); 
+        setNodes(prev => prev.map(n => n.id === searchVal ? root : n));
         setSelectedNode(root); 
         await expandNode(searchVal, 'transaction', 1, 0);
-      } else {
-        throw new Error("Forensic engine cannot resolve identifier format.");
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Failed to trace identifier.");
     } finally {
       setLoading(false);
     }
@@ -291,119 +303,51 @@ const App: React.FC = () => {
     doc.setFont("helvetica", "normal");
     doc.text(`REFERENCE ID: ${caseId}`, 20, 50);
     doc.text(`GENERATION DATETIME: ${timestamp}`, 20, 58);
-    doc.text(`NETWORK TOPOOLOGY: ${nodes.length} NODES / ${links.length} EDGES`, 20, 66);
+    doc.text(`NETWORK TOPOOLOGY: ${nodes.length} NODES`, 20, 66);
 
     let y = 95;
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(18);
     doc.setFont("helvetica", "bold");
-    doc.text("1. FORENSIC ENTITY AUDIT", 20, y);
+    doc.text("1. AUDIT SUMMARY", 20, y);
     y += 15;
 
     nodes.forEach((node, i) => {
-      if (y > 230) { doc.addPage(); y = 25; }
-      
-      doc.setFillColor(248, 250, 252);
-      doc.rect(15, y - 5, 180, 105, 'F');
-      
-      doc.setTextColor(15, 23, 42);
+      if (y > 240) { doc.addPage(); y = 25; }
+      doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.text(`ENTITY #${i + 1}: ${node.type.toUpperCase()}`, 20, y);
+      doc.text(`${i + 1}. [${node.type.toUpperCase()}] ${node.id}`, 20, y);
       y += 6;
-      
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`IDENTIFIER: ${node.id}`, 20, y);
-      y += 10;
-
-      const risk = calculateRisk(node);
-      const riskLevel = risk > 75 ? 'CRITICAL' : risk > 45 ? 'ELEVATED' : 'NOMINAL';
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(risk > 75 ? 180 : risk > 45 ? 200 : 16, risk > 45 ? 40 : 185, risk > 75 ? 40 : 129);
-      doc.text(`RISK SCORE ASSESSMENT: ${risk}% [${riskLevel}]`, 20, y);
-      y += 8;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(51, 65, 85);
-      const details = Object.entries(node.details || {}).slice(0, 12);
+      doc.text(`RISK: ${calculateRisk(node)}%`, 25, y);
+      y += 5;
+      const details = Object.entries(node.details || {}).slice(0, 5);
       details.forEach(([k, v]) => {
-        if (k === 'risk_score') return;
-        doc.text(`${k.toUpperCase().replace(/_/g, ' ')}: ${v}`, 25, y);
-        y += 4.5;
+        doc.text(`${k}: ${v}`, 30, y);
+        y += 4;
       });
-      y += 6;
-
-      const osintLinks = blockchainService.getExternalOsintLinks(node.id, node.type);
-      if (osintLinks.length > 0) {
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(15, 23, 42);
-        doc.text("VERIFIED OSINT REPOSITORIES:", 25, y);
-        y += 5;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
-        doc.setTextColor(2, 132, 199);
-        osintLinks.forEach(link => {
-          doc.text(`>> ${link.name}: ${link.url}`, 30, y);
-          y += 4;
-        });
-      }
-      y += 15;
+      y += 10;
     });
 
-    if (links.length > 0) {
-        doc.addPage();
-        y = 25;
-        doc.setFontSize(18);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(0, 0, 0);
-        doc.text("2. NETWORK FLOW LOGS & AMOUNTS", 20, y);
-        y += 15;
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-        
-        links.forEach((link, i) => {
-           if (y > 270) { doc.addPage(); y = 20; }
-           const sourceId = typeof link.source === 'object' ? (link.source as any).id : link.source;
-           const targetId = typeof link.target === 'object' ? (link.target as any).id : link.target;
-           
-           const targetNode = nodes.find(n => n.id === targetId);
-           const amount = targetNode?.details?.amount || targetNode?.details?.inflow_amount || targetNode?.details?.transaction_amount || "N/A";
-
-           doc.setTextColor(30, 41, 59);
-           doc.text(`FLOW #${i+1}: SOURCE [${String(sourceId).substring(0,18)}...]`, 20, y);
-           y += 5;
-           doc.setTextColor(100, 116, 139);
-           doc.text(`        == TRANSFER TO ==> [${String(targetId).substring(0,18)}...]`, 20, y);
-           doc.setFont("helvetica", "bold");
-           doc.setTextColor(16, 185, 129);
-           doc.text(` [TX VALUE: ${amount}]`, 140, y);
-           doc.setFont("helvetica", "normal");
-           y += 10;
-        });
-    }
-
-    const pageCount = (doc as any).internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(148, 163, 184);
-        doc.text("SOTANIK CRYPTO HUB - PROPRIETARY FORENSIC ANALYSIS - DO NOT DISCLOSE", 105, 285, { align: "center" });
-        doc.text(`PAGE ${i} OF ${pageCount}`, 200, 285, { align: "right" });
-    }
-
-    doc.save(`SOTANIK_FORENSIC_CASE_${caseId}.pdf`);
+    doc.save(`SoTaNik_AI_Report_${caseId}.pdf`);
   };
 
   return (
     <div className="flex h-screen bg-[#020408] text-slate-200 overflow-hidden font-sans selection:bg-emerald-500/40">
       <aside className={`bg-[#05070c] border-r border-white/5 flex flex-col transition-all duration-500 z-30 shadow-2xl ${sidebarOpen ? 'w-80' : 'w-24'}`}>
         <div className="p-10 flex items-center gap-5">
-          <div className="bg-sky-500/5 p-3 rounded-2xl flex items-center justify-center shrink-0 border border-sky-400/20 shadow-lg shadow-sky-500/10 active:scale-95 transition-transform">
-            <Cat size={28} className="text-sky-400" />
+          <div className="bg-sky-500/5 p-2 rounded-2xl flex items-center justify-center shrink-0 border border-sky-400/20 shadow-lg shadow-sky-500/10 active:scale-95 transition-transform">
+            <svg viewBox="0 0 400 400" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M50 80 L130 50 L160 150 L50 80 Z" stroke="#38BDF8" strokeWidth="16" strokeLinejoin="round"/>
+              <path d="M350 80 L270 50 L240 150 L350 80 Z" stroke="#38BDF8" strokeWidth="16" strokeLinejoin="round"/>
+              <path d="M80 160 C80 160 100 320 200 320 C300 320 320 160 320 160" stroke="#38BDF8" strokeWidth="16" strokeLinecap="round"/>
+              <path d="M120 200 C120 200 130 250 160 250" stroke="#38BDF8" strokeWidth="10" strokeLinecap="round"/>
+              <path d="M280 200 C280 200 270 250 240 250" stroke="#38BDF8" strokeWidth="10" strokeLinecap="round"/>
+              <path d="M140 210 L180 210 L160 245 Z" fill="#38BDF8"/>
+              <path d="M260 210 L220 210 L240 245 Z" fill="#38BDF8"/>
+              <path d="M180 300 L200 320 L220 300" stroke="#38BDF8" strokeWidth="8" strokeLinecap="round"/>
+            </svg>
           </div>
           {sidebarOpen && (
             <div className="flex flex-col">
@@ -517,7 +461,7 @@ const App: React.FC = () => {
                         <div className="grid grid-cols-2 gap-6">
                           <div className="bg-[#0f1420] border border-white/5 rounded-[2rem] p-8 flex flex-col gap-2 hover:bg-[#111827] transition-colors shadow-lg group">
                             <div className="flex items-center gap-3 text-[11px] uppercase font-black text-slate-500 tracking-widest leading-none">
-                              <AlertTriangle size={14} className="text-rose-500" /> Security Risk
+                              <AlertTriangle size={14} className="text-rose-500" /> Risk Level
                             </div>
                             <span className="text-4xl font-black text-emerald-500 mt-3 tracking-tighter">{selectedNode.riskScore || calculateRisk(selectedNode)}%</span>
                           </div>
@@ -551,7 +495,7 @@ const App: React.FC = () => {
                                 <div className="absolute h-px w-full bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent"></div>
                                 <div className="bg-[#0a0d14] border border-emerald-500/30 px-6 py-3 rounded-full z-10 flex flex-col items-center">
                                    <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter">Value Transferred</span>
-                                   <span className="text-lg font-black text-emerald-400">{selectedNode.details.amount || selectedNode.details.transaction_amount}</span>
+                                   <span className="text-lg font-black text-emerald-400">{selectedNode.details.amount}</span>
                                 </div>
                              </div>
 
@@ -580,44 +524,19 @@ const App: React.FC = () => {
                         </section>
                       )}
 
-                      {selectedNode.details?.clustering_label && selectedNode.details.clustering_label !== 'Indeterminate' && (
-                        <section className="space-y-8 animate-in slide-in-from-bottom-5 duration-600">
-                           <label className="text-[11px] uppercase tracking-[0.5em] text-amber-500 font-black leading-none flex items-center gap-3">
-                            <Fingerprint size={16} /> Entity Intelligence
-                          </label>
-                          <div className="bg-amber-500/5 border border-amber-500/20 rounded-[2.5rem] p-10 space-y-4 shadow-inner">
-                             <div className="flex items-center justify-between">
-                                <span className="text-[10px] uppercase font-black text-amber-600/80 tracking-widest">Attributed Label</span>
-                                <span className="text-sm font-black text-amber-500 uppercase">{selectedNode.details.clustering_label}</span>
-                             </div>
-                             {selectedNode.details.entity_tags && selectedNode.details.entity_tags !== 'None detected' && (
-                                <div className="flex flex-col gap-3 border-t border-amber-500/10 pt-4 mt-2">
-                                  <span className="text-[10px] uppercase font-black text-amber-600/80 tracking-widest">Forensic Tags</span>
-                                  <div className="flex flex-wrap gap-2">
-                                     {selectedNode.details.entity_tags.split(',').map((tag: string) => (
-                                       <span key={tag} className="text-[10px] px-3 py-1 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20 font-black uppercase tracking-tighter">{tag.trim()}</span>
-                                     ))}
-                                  </div>
-                                </div>
-                             )}
-                          </div>
-                        </section>
-                      )}
-
                       <section className="space-y-8 animate-in slide-in-from-bottom-6 duration-700">
                         <label className="text-[11px] uppercase tracking-[0.5em] text-slate-600 font-black leading-none flex items-center gap-3">
                           <Database size={16} className="text-emerald-500" /> Forensic Attributes
                         </label>
                         <div className="grid grid-cols-1 gap-4">
                           {Object.entries(selectedNode.details || {}).map(([key, val]) => {
-                            if (['clustering_label', 'entity_tags', 'risk_score', 'sender', 'receiver', 'amount', 'transaction_amount'].includes(key)) return null;
+                            if (['risk_score', 'sender', 'receiver', 'amount', 'status'].includes(key)) return null;
                             return (
                               <div key={key} className="flex items-center justify-between p-8 bg-[#0f1420]/60 border border-white/5 rounded-[2.25rem] group hover:bg-[#111827] transition-all shadow-md">
                                 <div className="flex items-center gap-3 text-[10px] uppercase font-black text-slate-600 tracking-[0.2em]">
-                                   {key.includes('amount') || key.includes('balance') || key.includes('volume') ? <TrendingUp size={12} className="text-emerald-500" /> : null}
                                    {key.replace(/_/g, ' ')}
                                 </div>
-                                <span className={`text-[13px] font-black transition-colors ${key.includes('amount') || key.includes('balance') ? 'text-emerald-400' : 'text-slate-200'} group-hover:text-emerald-400`}>
+                                <span className={`text-[13px] font-black transition-colors text-slate-200 group-hover:text-emerald-400`}>
                                   {String(val)}
                                 </span>
                               </div>

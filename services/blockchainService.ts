@@ -1,3 +1,4 @@
+
 import { AddressInfo, Transaction, SearchType } from '../types';
 
 const BTC_PROVIDERS = [
@@ -19,8 +20,9 @@ const fetchWithFallback = async (endpoint: string, options: RequestInit = {}, ti
       if (isBlockcypher) {
         if (endpoint.startsWith('/address/')) {
           const addr = endpoint.split('/')[2];
+          // Increased Blockcypher limit to 50
           finalUrl = endpoint.endsWith('/txs') 
-            ? `${base}/addrs/${addr}/full?limit=20` 
+            ? `${base}/addrs/${addr}/full?limit=50` 
             : `${base}/addrs/${addr}/balance`;
         } else if (endpoint.startsWith('/tx/')) {
           finalUrl = `${base}/txs/${endpoint.split('/')[2]}`;
@@ -94,7 +96,6 @@ export const blockchainService = {
   async getClusteringHints(address: string, isEth: boolean): Promise<any> {
     if (isEth) return null;
     try {
-      // Fetching from Blockchair's dashboard for addresses gives labels, tags and stats
       const response = await fetch(`https://api.blockchair.com/bitcoin/dashboards/address/${address}?limit=0`);
       if (response.ok) {
         const result = await response.json();
@@ -156,7 +157,8 @@ export const blockchainService = {
     const isEth = /^0x[a-fA-F0-9]{40}$/i.test(address);
     if (isEth) {
       try {
-        const res = await fetch(`https://eth.blockscout.com/api/v2/addresses/${address}/transactions?limit=15`);
+        // Increased limit for ETH transactions
+        const res = await fetch(`https://eth.blockscout.com/api/v2/addresses/${address}/transactions?limit=50`);
         if (res.ok) {
           const raw = await res.json();
           return (raw.items || []).map((t: any) => ({
@@ -172,7 +174,8 @@ export const blockchainService = {
     try {
       return await fetchWithFallback(`/address/${address}/txs`);
     } catch (e) {
-      const res = await fetch(`https://blockchain.info/rawaddr/${address}?cors=true&limit=10`);
+      // Increased limit for Blockchain.info transactions
+      const res = await fetch(`https://blockchain.info/rawaddr/${address}?cors=true&limit=50`);
       if (res.ok) {
         const raw = await res.json();
         return (raw.txs || []).map((t: any) => ({

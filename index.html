@@ -34,6 +34,14 @@
       .animate-pulse-slow {
         animation: pulse-emerald 3s infinite;
       }
+      @keyframes spin-linear {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .animate-spin-slow {
+        animation: spin-linear 10s linear infinite;
+        transform-origin: center;
+      }
     </style>
   <script type="importmap">
 {

@@ -1,3 +1,4 @@
+
 export interface Transaction {
   txid: string;
   version: number;
@@ -50,6 +51,7 @@ export interface NodeData {
   label: string;
   details?: any;
   riskScore?: number;
+  isRoot?: boolean;
 }
 
 export interface LinkData {

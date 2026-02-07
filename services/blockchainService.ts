@@ -92,45 +92,107 @@ export const blockchainService = {
     const hits: any[] = [];
     try {
       // 1. Search Code with Text Matches (extracts actual code snippets)
-      const codeRes = await fetch(`https://api.github.com/search/code?q="${query}"`, {
+      const codeRes = await fetch(`https://api.github.com/search/code?q="${encodeURIComponent(query)}"&per_page=10`, {
         headers: { 'Accept': 'application/vnd.github.v3.text-match+json' }
       });
       if (codeRes.ok) {
         const data = await codeRes.json();
-        (data.items || []).forEach((item: any) => {
-          const fragment = item.text_matches?.[0]?.fragment || `Matched identifier in ${item.path}`;
-          hits.push({
-            name: item.repository.full_name,
-            url: item.html_url,
-            path: item.path,
-            repo_url: item.repository.html_url,
-            description: item.repository.description || "Source code match",
-            context: fragment.trim(),
-            type: 'github_code'
-          });
-        });
+        const items = (data.items || []).slice(0, 5); // Limit to 5 most relevant results
+        for (const item of items) {
+          // Get the actual file content to extract the relevant snippet
+          try {
+            const contentRes = await fetch(item.url, {
+              headers: { 'Accept': 'application/vnd.github.v3.raw' }
+            });
+            let context = item.text_matches?.[0]?.fragment || '';
+            
+            if (contentRes.ok) {
+              const content = await contentRes.text();
+              // Find the line containing the query
+              const lines = content.split('\n');
+              const matchingLines = lines.filter(line => 
+                line.toLowerCase().includes(query.toLowerCase())
+              ).slice(0, 3); // Get up to 3 matching lines
+              
+              if (matchingLines.length > 0) {
+                context = matchingLines.join('\n').trim().substring(0, 500);
+              }
+            }
+            
+            hits.push({
+              name: item.repository.full_name,
+              url: item.html_url,
+              path: item.path,
+              repo_url: item.repository.html_url,
+              description: item.repository.description || "Source code match",
+              context: context || `Found in ${item.path}`,
+              type: 'github_code'
+            });
+          } catch (err) {
+            // If content fetch fails, still include the result with available info
+            hits.push({
+              name: item.repository.full_name,
+              url: item.html_url,
+              path: item.path,
+              repo_url: item.repository.html_url,
+              description: item.repository.description || "Source code match",
+              context: item.text_matches?.[0]?.fragment || `Found in ${item.path}`,
+              type: 'github_code'
+            });
+          }
+        }
       }
 
       // 2. Search Commits (identifies matches in commit messages)
-      const commitRes = await fetch(`https://api.github.com/search/commits?q="${query}"`, {
+      const commitRes = await fetch(`https://api.github.com/search/commits?q="${encodeURIComponent(query)}"&per_page=5`, {
         headers: { 'Accept': 'application/vnd.github.cloak-preview' }
       });
       if (commitRes.ok) {
         const data = await commitRes.json();
-        (data.items || []).forEach((item: any) => {
+        (data.items || []).slice(0, 5).forEach((item: any) => {
           hits.push({
             name: item.repository.full_name,
             url: item.html_url,
             path: 'Commit Message',
             repo_url: item.repository.html_url,
             description: "Found in commit logs",
-            context: item.commit.message,
+            context: item.commit.message.substring(0, 500),
             type: 'github_commit'
           });
         });
       }
     } catch (e) { 
-      console.warn("GitHub OSINT service limit reached or network error."); 
+      console.warn("GitHub OSINT service limit reached or network error.", e); 
+    }
+    return hits;
+  },
+
+  async searchPastebin(query: string) {
+    const hits: any[] = [];
+    try {
+      // Use Google Custom Search to find Pastebin pastes
+      // This is a workaround since Pastebin doesn't have a public search API
+      const searchUrl = `https://www.google.com/search?q=site:pastebin.com+${encodeURIComponent(query)}`;
+      
+      // Note: This is a demonstration URL - actual implementation would need
+      // to use a scraping service or the user's own Google Custom Search API
+      // For now, we'll construct realistic Pastebin URLs based on common patterns
+      
+      // Generate realistic Pastebin search results hint
+      console.log(`To search Pastebin for "${query}", visit: ${searchUrl}`);
+      console.log('Note: Pastebin search requires manual verification or a custom scraping solution.');
+      
+      // Return an instructional result
+      hits.push({
+        name: 'Pastebin Search Required',
+        url: searchUrl,
+        description: `Manual search needed: Search for "${query}" on Pastebin`,
+        context: `To find this identifier on Pastebin, visit the Google search URL or use a scraping service. Pastebin does not provide a public search API.`,
+        type: 'pastebin_search_instruction'
+      });
+      
+    } catch (e) {
+      console.warn("Pastebin search error:", e);
     }
     return hits;
   },

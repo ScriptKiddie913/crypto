@@ -71,10 +71,49 @@ const App: React.FC = () => {
 
   const validateUrl = async (url: string): Promise<boolean> => {
     try {
-      // Best effort check via no-cors to avoid blocking valid forensic sources
-      await fetch(url, { mode: 'no-cors' });
+      // Validate URL format first
+      const urlObj = new URL(url);
+      
+      // Check for realistic domains
+      const validDomains = ['github.com', 'pastebin.com', 'gist.github.com', 'gitlab.com', 'bitbucket.org'];
+      const isValidDomain = validDomains.some(domain => urlObj.hostname.includes(domain));
+      
+      if (!isValidDomain) {
+        console.warn(`URL domain not in whitelist: ${urlObj.hostname}`);
+        return false;
+      }
+      
+      // Check if URL looks like a real resource (not just a search query)
+      if (url.includes('/search?q=') && !url.includes('github.com')) {
+        // Google search URLs are informational, not direct resources
+        return false;
+      }
+      
+      // For GitHub URLs, validate they point to actual resources
+      if (urlObj.hostname.includes('github.com')) {
+        const path = urlObj.pathname;
+        // Valid patterns: /user/repo, /user/repo/blob/..., /user/repo/commit/...
+        const validPattern = /^\/[^\/]+\/[^\/]+(\/|$|\/(blob|tree|commit|issues|pull)\/)/;
+        if (!validPattern.test(path)) {
+          console.warn(`Invalid GitHub URL pattern: ${path}`);
+          return false;
+        }
+      }
+      
+      // For Pastebin URLs, validate format
+      if (urlObj.hostname.includes('pastebin.com')) {
+        const path = urlObj.pathname;
+        // Valid pattern: /xxxxx where xxxxx is alphanumeric paste ID
+        const validPattern = /^\/[a-zA-Z0-9]{8}$/;
+        if (!validPattern.test(path) && !path.startsWith('/raw/')) {
+          console.warn(`Invalid Pastebin URL pattern: ${path}`);
+          return false;
+        }
+      }
+      
       return true;
     } catch (e) {
+      console.warn(`URL validation failed: ${url}`, e);
       return false;
     }
   };
@@ -190,84 +229,21 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const prompt = `Perform a high-fidelity OSINT sweep for the identifier: "${targetId}".
-
-      CRITICAL OBJECTIVE: Locate verified mentions in Pastebin, GitHub, and Leaked Databases.
-      
-      SPECIFIC INSTRUCTIONS:
-      1. Use Google Search to find "${targetId}" specifically on "pastebin.com".
-      2. Identify GitHub repositories or code snippets containing the identifier verbatim.
-      3. For each finding, verify the link is active.
-      4. Extract associated emails, usernames, and other wallets from the same source.
-      5. Attribution: Clearly link each result to "${targetId}".
-
-      OUTPUT: Normalized JSON array.
-      [
-        {
-          "source": "pastebin|github|darknet|leak",
-          "title": "Finding Title",
-          "url": "Verifiable URL",
-          "snippet": "Verbatim proof containing ${targetId}",
-          "extracted_entities": { "wallets": [], "emails": [], "handles": [] },
-          "relevance": "Direct match in leaked config/paste",
-          "linked_to": "${targetId}"
-        }
-      ]
-
-      Return [] if no matches found. JSON only.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: prompt,
-        config: { tools: [{ googleSearch: {} }] }
-      });
-
-      let results = [];
-      try {
-        let text = (response.text || '[]').replace(/```json\n?/, '').replace(/```\n?$/, '').trim();
-        results = JSON.parse(text);
-      } catch (e) {
-        const match = response.text?.match(/\[\s*\{.*\}\s*\]/s);
-        if (match) results = JSON.parse(match[0]);
-      }
-      
-      if (!Array.isArray(results)) results = [];
-
-      for (const res of results) {
-        const isAlive = await validateUrl(res.url);
-        if (!isAlive) continue;
-
-        const newNode: NodeData = {
-          id: res.url,
-          type: res.source === 'github' ? 'github' : 'osint_confirmed',
-          label: `${res.source.toUpperCase()}: ${res.title.substring(0, 12)}`,
-          details: {
-            url: res.url,
-            context: res.snippet,
-            extracted: res.extracted_entities,
-            source_engine: res.source,
-            osint: true,
-            status: "VERIFIED_HIT",
-            parent_wallet: res.linked_to || targetId
-          }
-        };
-        addNode(newNode);
-        addLink({ source: targetId, target: newNode.id, value: 5, label: 'OSINT_ATTRIBUTION' });
-      }
-
-      // Supplementary Direct GitHub Search (with Text-Match snippets and commit log depth)
+      // Direct GitHub Search (with Text-Match snippets and commit log depth)
       const gitHits = await blockchainService.searchGitHub(targetId);
       for (const git of gitHits) {
         const isAlive = await validateUrl(git.url);
-        if (!isAlive) continue;
+        if (!isAlive) {
+          console.warn(`Skipping invalid GitHub URL: ${git.url}`);
+          continue;
+        }
 
         const gitNode: NodeData = {
           id: git.url,
           type: 'github',
-          label: `GIT: ${git.name.split('/')[1]}`,
+          label: `GIT: ${git.name.split('/').pop()?.substring(0, 15) || 'repo'}`,
           details: { 
-            source: 'GitHub Direct', 
+            source: 'GitHub Direct Search', 
             url: git.url, 
             context: git.context, 
             parent_wallet: targetId, 
@@ -276,16 +252,46 @@ const App: React.FC = () => {
             path: git.path,
             repo_desc: git.description,
             repo_url: git.repo_url,
-            match_type: git.type
+            match_type: git.type,
+            status: 'VERIFIED_HIT'
           }
         };
         addNode(gitNode);
         addLink({ source: targetId, target: gitNode.id, value: 5, label: git.type === 'github_commit' ? 'COMMIT_CONTEXT' : 'CODE_SNIPPET' });
       }
 
+      // Pastebin Search (note: requires manual verification)
+      const pastebinHits = await blockchainService.searchPastebin(targetId);
+      for (const paste of pastebinHits) {
+        // Note: Pastebin results are informational and guide user to manual search
+        // since Pastebin doesn't have a public search API
+        if (paste.type === 'pastebin_search_instruction') {
+          const instructionNode: NodeData = {
+            id: `pastebin-search-${targetId}`,
+            type: 'osint_confirmed',
+            label: 'PASTEBIN_MANUAL_SEARCH',
+            details: {
+              source: 'Pastebin Search Guide',
+              url: paste.url,
+              context: paste.context,
+              parent_wallet: targetId,
+              osint: true,
+              status: 'MANUAL_VERIFICATION_REQUIRED',
+              description: paste.description
+            }
+          };
+          addNode(instructionNode);
+          addLink({ source: targetId, target: instructionNode.id, value: 3, label: 'PASTEBIN_SEARCH_REQUIRED' });
+        }
+      }
+
+      if (gitHits.length === 0 && pastebinHits.length === 0) {
+        setError(`No OSINT results found for "${targetId}". The identifier may not be publicly referenced.`);
+      }
+
     } catch (e) {
       console.error("OSINT Error", e);
-      setError("Forensic OSINT sweep encountered a bottleneck.");
+      setError("Forensic OSINT sweep encountered an error. Please try again.");
     } finally {
       setSocialLoading(false);
     }
@@ -594,18 +600,31 @@ const App: React.FC = () => {
                     <label className="text-[9px] uppercase tracking-widest text-sky-400 font-black flex items-center gap-2">
                        <ShieldCheck size={12} className="text-sky-400" /> SOURCE_VERIFICATION
                     </label>
-                    <div className={`p-6 bg-white/5 border rounded-2xl shadow-xl ${selectedNode.details.status === 'VERIFIED_HIT' ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-sky-500/20 bg-sky-500/5'}`}>
+                    <div className={`p-6 bg-white/5 border rounded-2xl shadow-xl ${
+                      selectedNode.details.status === 'VERIFIED_HIT' 
+                        ? 'border-emerald-500/40 bg-emerald-500/5' 
+                        : selectedNode.details.status === 'MANUAL_VERIFICATION_REQUIRED'
+                        ? 'border-yellow-500/40 bg-yellow-500/5'
+                        : 'border-sky-500/20 bg-sky-500/5'
+                    }`}>
                       <div className="flex justify-between items-start mb-4">
-                        <span className={`text-[8px] uppercase font-black px-2 py-1 rounded ${selectedNode.details.status === 'VERIFIED_HIT' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-sky-500/20 text-sky-400'}`}>
+                        <span className={`text-[8px] uppercase font-black px-2 py-1 rounded ${
+                          selectedNode.details.status === 'VERIFIED_HIT' 
+                            ? 'bg-emerald-500/20 text-emerald-400' 
+                            : selectedNode.details.status === 'MANUAL_VERIFICATION_REQUIRED'
+                            ? 'bg-yellow-500/20 text-yellow-400'
+                            : 'bg-sky-500/20 text-sky-400'
+                        }`}>
                           {selectedNode.details.status}
                         </span>
                         {selectedNode.details.source_engine === 'pastebin' && <FileText size={14} className="text-orange-500" />}
                         {selectedNode.type === 'github' && <Github size={14} className="text-slate-400" />}
+                        {selectedNode.details.status === 'MANUAL_VERIFICATION_REQUIRED' && <AlertTriangle size={14} className="text-yellow-500" />}
                       </div>
                       
                       <div className="bg-[#020408] p-4 rounded-lg border border-white/5 mb-4 font-mono text-[10px] text-slate-400 leading-tight overflow-hidden">
                          <div className="mb-2 italic text-slate-200 font-bold border-l-2 border-emerald-500/50 pl-2 py-1 bg-emerald-500/5">
-                           {selectedNode.details.match_type === 'github_commit' ? "COMMIT_MSG:" : "EXTRACTED_SNIPPET:"}
+                           {selectedNode.details.match_type === 'github_commit' ? "COMMIT_MSG:" : selectedNode.details.description ? "SEARCH_GUIDE:" : "EXTRACTED_SNIPPET:"}
                          </div>
                          <div className="whitespace-pre-wrap mt-2 overflow-x-auto p-2 bg-black/40 rounded border border-white/5 max-h-48">
                            {selectedNode.details.context || 'Verbatim match confirmed.'}
@@ -652,7 +671,7 @@ const App: React.FC = () => {
                       
                       <div className="flex flex-col gap-2">
                         <a href={selectedNode.details.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-[10px] font-black uppercase text-slate-300 shadow-lg group">
-                          {selectedNode.details.match_type === 'github_commit' ? 'EXAMINE_COMMIT' : 'PIVOT_TO_SOURCE'} <ExternalLink size={14} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                          {selectedNode.details.match_type === 'github_commit' ? 'EXAMINE_COMMIT' : selectedNode.details.status === 'MANUAL_VERIFICATION_REQUIRED' ? 'OPEN_SEARCH' : 'PIVOT_TO_SOURCE'} <ExternalLink size={14} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                         </a>
                         {selectedNode.details.repo_url && (
                            <a href={selectedNode.details.repo_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-[10px] font-black uppercase text-sky-400 shadow-lg group">
@@ -670,7 +689,7 @@ const App: React.FC = () => {
                   </label>
                   <div className="grid grid-cols-1 gap-2">
                     {Object.entries(selectedNode.details || {}).map(([key, val]) => {
-                      if (['identifier', 'status', 'osint', 'context', 'url', 'type', 'category', 'tier', 'balance', 'clustering_label', 'identity_pivot', 'net_balance', 'forensic_tier', 'threat_risk', 'entity_type', 'confidence', 'parent_wallet', 'flow_captured', 'role', 'flow', 'source_engine', 'extracted', 'origin_paste', 'forensic_role', 'flow_value', 'repo', 'path', 'repo_url', 'repo_desc', 'match_type'].includes(key)) return null;
+                      if (['identifier', 'status', 'osint', 'context', 'url', 'type', 'category', 'tier', 'balance', 'clustering_label', 'identity_pivot', 'net_balance', 'forensic_tier', 'threat_risk', 'entity_type', 'confidence', 'parent_wallet', 'flow_captured', 'role', 'flow', 'source_engine', 'extracted', 'origin_paste', 'forensic_role', 'flow_value', 'repo', 'path', 'repo_url', 'repo_desc', 'match_type', 'description', 'source'].includes(key)) return null;
                       return (
                         <div key={key} className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-xl group hover:bg-white/10 transition-all">
                           <span className="text-[9px] uppercase font-black text-slate-500 tracking-widest truncate max-w-[150px]">{key.replace(/_/g, ' ')}</span>

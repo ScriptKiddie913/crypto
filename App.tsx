@@ -801,13 +801,15 @@ const App: React.FC = () => {
     doc.text('LOW RISK', 148, y + 18);
     y += 35;
 
-    // Detailed Risk Analysis
+    // Detailed Risk Analysis with Currency Info
     riskNodes.forEach((node, index) => {
       if (y > 250) { doc.addPage(); y = 20; }
       const risk = node.riskScore ?? node.details?.threat_risk ?? 0;
+      const currency = node.details?.balance?.includes('BTC') ? 'BTC' : 
+                       node.details?.balance?.includes('ETH') ? 'ETH' : 'UNKNOWN';
       
       doc.setFillColor(250, 250, 250);
-      doc.rect(15, y - 5, 180, 30, 'F');
+      doc.rect(15, y - 5, 180, 38, 'F');
       
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
@@ -820,10 +822,15 @@ const App: React.FC = () => {
       doc.setFontSize(9);
       doc.setTextColor(75, 85, 99);
       doc.text(`TYPE: ${node.details?.entity_type || 'UNKNOWN'} | LABEL: ${node.details?.clustering_label || 'IDENTIFIED'}`, 20, y + 12);
+      doc.text(`CURRENCY: ${currency} | NETWORK: ${node.details?.network_type || 'UNKNOWN'}`, 20, y + 19);
       if (node.details?.total_received) {
-        doc.text(`RECEIVED: ${node.details.total_received} | SENT: ${node.details.total_sent || '0'}`, 20, y + 19);
+        doc.text(`RECEIVED: ${node.details.total_received} | SENT: ${node.details.total_sent || '0'}`, 20, y + 26);
       }
-      y += 35;
+      if (node.details?.balance || node.details?.current_balance) {
+        doc.setTextColor(16, 185, 129);
+        doc.text(`BALANCE: ${node.details.balance || node.details.current_balance}`, 20, y + 33);
+      }
+      y += 43;
     });
 
     // Enhanced OSINT Intelligence Section
@@ -866,9 +873,11 @@ const App: React.FC = () => {
       
       doc.setFontSize(9);
       doc.setTextColor(59, 130, 246);
+      doc.setFont('courier', 'normal');
       const urlText = doc.splitTextToSize(`URL: ${node.id}`, 165);
       doc.text(urlText, 20, y + 12);
       y += (urlText.length * 4);
+      doc.setFont('helvetica', 'normal');
       
       doc.setTextColor(5, 7, 12);
       const proofText = doc.splitTextToSize(`INTELLIGENCE: ${node.details?.context || 'Identifier verified in source.'}`, 165);
@@ -888,12 +897,12 @@ const App: React.FC = () => {
       y += 20;
     });
 
-    // Transaction Flow Analysis (new section)
+    // Transaction Flow Analysis (enhanced with detailed risks)
     if (y > 200) { doc.addPage(); y = 20; }
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('4. TRANSACTION FLOW & PATTERN ANALYSIS', 15, y);
+    doc.text('4. TRANSACTION FLOW & DETAILED RISK ANALYSIS', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 
@@ -917,7 +926,81 @@ const App: React.FC = () => {
     doc.setFontSize(10);
     doc.text(`HIGH VALUE TXS (>1 BTC/ETH): ${highValueTxs}`, 15, y);
     doc.text(`FLAGGED SUSPICIOUS: ${suspiciousTxs}`, 110, y);
+    y += 8;
+    doc.text(`TOTAL VALUE FLOW: ${totalValue.toFixed(8)} (Combined Units)`, 15, y);
     y += 15;
+
+    // Detailed Transaction Analysis with Risks, Currency, and Wallet Data
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('DETAILED TRANSACTION BREAKDOWN', 15, y);
+    y += 10;
+
+    transactionNodes.forEach((tx, index) => {
+      if (y > 230) { doc.addPage(); y = 20; }
+      
+      const amount = tx.details?.amount || tx.details?.total_value_out || '0';
+      const currency = amount.includes('BTC') ? 'BTC' : amount.includes('ETH') ? 'ETH' : 'UNKNOWN';
+      const sender = tx.details?.sender || tx.details?.from || 'UNKNOWN';
+      const receiver = tx.details?.receiver || tx.details?.to || 'UNKNOWN';
+      const fee = tx.details?.fee_analysis || tx.details?.gas_fee || 'N/A';
+      const timestamp = tx.details?.timestamp_analysis || 'N/A';
+      const riskIndicators = tx.details?.risk_indicators || [];
+      const privacyScore = tx.details?.privacy_score || 'N/A';
+      
+      // Transaction header box
+      doc.setFillColor(245, 247, 250);
+      doc.rect(15, y - 5, 180, 8, 'F');
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(5, 7, 12);
+      doc.text(`TX ${index + 1}: ${tx.id.substring(0, 20)}...`, 20, y);
+      y += 10;
+      
+      // Currency and core data
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(16, 185, 129);
+      doc.text(`CURRENCY: ${currency}`, 20, y);
+      doc.text(`AMOUNT: ${amount}`, 80, y);
+      y += 6;
+      
+      // Wallet addresses
+      doc.setTextColor(75, 85, 99);
+      doc.text(`SENDER: ${sender.substring(0, 40)}${sender.length > 40 ? '...' : ''}`, 20, y);
+      y += 5;
+      doc.text(`RECEIVER: ${receiver.substring(0, 40)}${receiver.length > 40 ? '...' : ''}`, 20, y);
+      y += 6;
+      
+      // Transaction details
+      doc.setFontSize(8);
+      doc.text(`FEE: ${fee} | PRIVACY SCORE: ${privacyScore}/100`, 20, y);
+      y += 5;
+      doc.text(`TIMESTAMP: ${timestamp.substring(0, 50)}`, 20, y);
+      y += 6;
+      
+      // Risk indicators section
+      if (riskIndicators.length > 0) {
+        doc.setFillColor(254, 226, 226);
+        doc.rect(20, y - 2, 170, 6 + (riskIndicators.length * 4), 'F');
+        doc.setTextColor(220, 38, 38);
+        doc.setFont('helvetica', 'bold');
+        doc.text('RISK INDICATORS:', 25, y + 2);
+        y += 6;
+        doc.setFont('helvetica', 'normal');
+        riskIndicators.forEach((risk: string) => {
+          doc.text(`• ${risk.replace('_', ' ')}`, 30, y);
+          y += 4;
+        });
+        y += 3;
+      } else {
+        doc.setTextColor(16, 185, 129);
+        doc.text('STATUS: NO RISK INDICATORS DETECTED', 20, y);
+        y += 6;
+      }
+      
+      y += 8;
+    });
 
     // Appendix: Technical Details
     if (y > 200) { doc.addPage(); y = 20; }
@@ -1242,11 +1325,11 @@ const App: React.FC = () => {
           )}
 
           {selectedNode && (
-            <div className="fixed inset-0 z-50 flex items-center justify-end pointer-events-none">
+            <div className="fixed top-28 left-0 right-0 bottom-0 z-50 flex items-center justify-end pointer-events-none">
               {/* Backdrop */}
               <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setSelectedNode(null)} />
               {/* Panel */}
-              <div className={`relative ${panelMinimized ? 'w-auto' : 'w-[360px] max-w-[95vw]'} ${panelMinimized ? 'h-auto' : 'h-[calc(100vh-2rem)]'} m-4 bg-[#05070c]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in slide-in-from-right-4`}>
+              <div className={`relative ${panelMinimized ? 'w-auto' : 'w-[360px] max-w-[95vw]'} ${panelMinimized ? 'h-auto' : 'h-[calc(100vh-8rem)]'} m-4 bg-[#05070c]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in slide-in-from-right-4`}>
                 {panelMinimized ? (
                   <div className="p-3 space-y-2">
                     <div className="flex items-center gap-2 mb-2">
@@ -1416,13 +1499,48 @@ const App: React.FC = () => {
                       </div>
                       
                       <div className="flex flex-col gap-3">
+                        {/* Source URL */}
+                        <div className="space-y-2">
+                          <div className="text-[7px] uppercase tracking-widest text-sky-400 font-black flex items-center gap-1">
+                            <LinkIcon size={8} /> SOURCE_URL
+                          </div>
+                          <div className="bg-slate-900/50 border border-slate-600/30 rounded-lg p-2">
+                            <a 
+                              href={selectedNode.details.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-[8px] font-mono text-blue-400 hover:text-blue-300 break-all underline decoration-blue-500/30 hover:decoration-blue-400"
+                            >
+                              {selectedNode.details.url}
+                            </a>
+                          </div>
+                        </div>
+                        
+                        {/* Action Buttons */}
                         <a href={selectedNode.details.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-5 bg-gradient-to-r from-slate-700/80 to-slate-600/80 border-2 border-slate-500/40 rounded-2xl hover:from-emerald-600/20 hover:to-emerald-500/20 hover:border-emerald-400/50 transition-all duration-300 text-[11px] font-black uppercase text-slate-200 hover:text-emerald-200 shadow-lg group backdrop-blur-sm">
                           {selectedNode.details.match_type === 'github_commit' ? 'EXAMINE_COMMIT' : 'PIVOT_TO_SOURCE'} <ExternalLink size={16} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                         </a>
                         {selectedNode.details.repo_url && (
-                           <a href={selectedNode.details.repo_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-5 bg-gradient-to-r from-sky-700/80 to-sky-600/80 border-2 border-sky-500/40 rounded-2xl hover:from-sky-600/30 hover:to-sky-500/30 hover:border-sky-400/60 transition-all duration-300 text-[11px] font-black uppercase text-sky-200 hover:text-sky-100 shadow-lg group backdrop-blur-sm">
-                             INSPECT_REPOSITORY <Github size={16} className="group-hover:scale-110 transition-transform" />
-                           </a>
+                          <>
+                            <div className="space-y-2">
+                              <div className="text-[7px] uppercase tracking-widest text-purple-400 font-black flex items-center gap-1">
+                                <Github size={8} /> REPOSITORY_URL
+                              </div>
+                              <div className="bg-slate-900/50 border border-slate-600/30 rounded-lg p-2">
+                                <a 
+                                  href={selectedNode.details.repo_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-[8px] font-mono text-purple-400 hover:text-purple-300 break-all underline decoration-purple-500/30 hover:decoration-purple-400"
+                                >
+                                  {selectedNode.details.repo_url}
+                                </a>
+                              </div>
+                            </div>
+                            <a href={selectedNode.details.repo_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-5 bg-gradient-to-r from-sky-700/80 to-sky-600/80 border-2 border-sky-500/40 rounded-2xl hover:from-sky-600/30 hover:to-sky-500/30 hover:border-sky-400/60 transition-all duration-300 text-[11px] font-black uppercase text-sky-200 hover:text-sky-100 shadow-lg group backdrop-blur-sm">
+                              INSPECT_REPOSITORY <Github size={16} className="group-hover:scale-110 transition-transform" />
+                            </a>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1434,11 +1552,34 @@ const App: React.FC = () => {
                     <Activity size={10} className="text-slate-500" /> WALLET_DATA
                   </label>
                   
-                  {/* Display balance prominently */}
+                  {/* Display balance prominently with currency */}
                   {(selectedNode.details?.balance || selectedNode.details?.current_balance) && (
                     <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                      <div className="text-[7px] font-bold text-emerald-400 uppercase mb-1">CURRENT BALANCE</div>
+                      <div className="text-[7px] font-bold text-emerald-400 uppercase mb-1 flex items-center gap-1">
+                        💰 CURRENT BALANCE
+                      </div>
                       <div className="text-sm font-bold text-emerald-300">{selectedNode.details.balance || selectedNode.details.current_balance}</div>
+                      {selectedNode.details?.network_type && (
+                        <div className="text-[6px] text-emerald-400/60 mt-1">NETWORK: {selectedNode.details.network_type}</div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Display sent/received totals */}
+                  {(selectedNode.details?.total_received || selectedNode.details?.total_sent) && (
+                    <div className="grid grid-cols-2 gap-1">
+                      {selectedNode.details.total_received && (
+                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-1.5">
+                          <div className="text-[6px] text-blue-400 font-bold uppercase">RECEIVED</div>
+                          <div className="text-[8px] font-bold text-blue-300">{selectedNode.details.total_received}</div>
+                        </div>
+                      )}
+                      {selectedNode.details.total_sent && (
+                        <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-1.5">
+                          <div className="text-[6px] text-orange-400 font-bold uppercase">SENT</div>
+                          <div className="text-[8px] font-bold text-orange-300">{selectedNode.details.total_sent}</div>
+                        </div>
+                      )}
                     </div>
                   )}
                   

@@ -1438,7 +1438,6 @@ const App: React.FC = () => {
             {/* Performance indicator */}
             <div className="text-[8px] text-slate-500 font-mono bg-black/20 px-3 py-2 rounded-lg border border-white/5">
               <div className="text-emerald-400 font-bold">NO API LIMITS</div>
-              <div>Cache: {osintService.getPerformanceMetrics().cacheHitRate}</div>
             </div>
             {nodes.length > 0 && (
               <button onClick={resetGraph} className="bg-gradient-to-r from-slate-800/80 to-slate-700/80 border-2 border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-400/70 px-6 h-16 rounded-3xl transition-all duration-300 flex items-center justify-center shadow-xl backdrop-blur-sm">

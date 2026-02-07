@@ -797,12 +797,12 @@ const App: React.FC = () => {
       y += 50;
     }
 
-    // Enhanced Risk Assessment Section (Wallets + Transactions)
+    // Enhanced Risk Assessment Section
     if (y > 220) { doc.addPage(); y = 20; }
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('2. COMPREHENSIVE RISK ASSESSMENT & TRANSACTION ANALYSIS', 15, y);
+    doc.text('2. COMPREHENSIVE RISK ASSESSMENT', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 
@@ -890,14 +890,80 @@ const App: React.FC = () => {
       y += 50;
     });
 
-    // Transaction Flow Analysis (within same section)
+    // Enhanced OSINT Intelligence Section
     if (y > 200) { doc.addPage(); y = 20; }
-    doc.setFontSize(14);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('TRANSACTION FLOW & DETAILED RISK ANALYSIS', 15, y);
-    doc.line(15, y + 1, 195, y + 1);
-    y += 12;
+    doc.text('3. COMPREHENSIVE OSINT & SOCIAL INTELLIGENCE', 15, y);
+    doc.line(15, y + 2, 195, y + 2);
+    y += 15;
+
+    const osintNodes = nodes.filter(n => n.type === 'osint_confirmed' || n.type === 'github' || n.type === 'social');
+    const githubHits = osintNodes.filter(n => n.type === 'github');
+    const socialHits = osintNodes.filter(n => n.type === 'social');
+    const otherHits = osintNodes.filter(n => n.type === 'osint_confirmed');
+
+    // OSINT Summary
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`TOTAL OSINT HITS: ${osintNodes.length} | GITHUB: ${githubHits.length} | SOCIAL: ${socialHits.length} | OTHER: ${otherHits.length}`, 15, y);
+    y += 15;
+
+    osintNodes.forEach((node, index) => {
+      if (y > 220) { doc.addPage(); y = 20; }
+      
+      // Color-coded background based on source
+      if (node.type === 'github') {
+        doc.setFillColor(240, 240, 245);
+      } else if (node.type === 'social') {
+        doc.setFillColor(245, 250, 255);
+      } else {
+        doc.setFillColor(250, 245, 245);
+      }
+      doc.rect(15, y - 5, 180, 60, 'F');
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(5, 7, 12);
+      const labelLines = doc.splitTextToSize(`${index + 1}. ${node.label}`, 170);
+      doc.text(labelLines[0], 20, y + 5);
+      
+      doc.setFontSize(8);
+      doc.setTextColor(59, 130, 246);
+      doc.setFont('courier', 'normal');
+      const urlText = doc.splitTextToSize(`URL: ${node.id}`, 170);
+      doc.text(urlText.slice(0, 2), 20, y + 12);
+      y += (Math.min(urlText.length, 2) * 4) + 5;
+      doc.setFont('helvetica', 'normal');
+      
+      doc.setTextColor(5, 7, 12);
+      const proofText = doc.splitTextToSize(`INTELLIGENCE: ${node.details?.context || 'Identifier verified in source.'}`, 170);
+      doc.text(proofText.slice(0, 3), 20, y + 5);
+      y += (Math.min(proofText.length, 3) * 4) + 5;
+      
+      if (node.details?.social_intelligence) {
+        doc.setFontSize(7);
+        doc.setTextColor(16, 185, 129);
+        doc.text(`THREAT_LEVEL: ${node.details.social_intelligence.threat_level} | PLATFORM: ${node.details.social_intelligence.source_platform.toUpperCase()}`, 20, y + 5);
+        y += 6;
+      }
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(16, 185, 129);
+      const attrText = doc.splitTextToSize(`ATTRIBUTION: ${node.details?.parent_wallet || rootNode?.id || 'UNKNOWN'}`, 170);
+      doc.text(attrText[0], 20, y + 5);
+      y += 22;
+    });
+
+    // Transaction Flow Analysis (enhanced with detailed risks)
+    if (y > 200) { doc.addPage(); y = 20; }
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 7, 12);
+    doc.text('4. TRANSACTION FLOW & DETAILED RISK ANALYSIS', 15, y);
+    doc.line(15, y + 2, 195, y + 2);
+    y += 15;
 
     const transactionNodes = nodes.filter(n => n.type === 'transaction');
     doc.setFontSize(12);
@@ -1023,78 +1089,12 @@ const App: React.FC = () => {
       y += 10;
     });
 
-    // Enhanced OSINT Intelligence Section
-    if (y > 200) { doc.addPage(); y = 20; }
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(5, 7, 12);
-    doc.text('3. COMPREHENSIVE OSINT & SOCIAL INTELLIGENCE', 15, y);
-    doc.line(15, y + 2, 195, y + 2);
-    y += 15;
-
-    const osintNodes = nodes.filter(n => n.type === 'osint_confirmed' || n.type === 'github' || n.type === 'social');
-    const githubHits = osintNodes.filter(n => n.type === 'github');
-    const socialHits = osintNodes.filter(n => n.type === 'social');
-    const otherHits = osintNodes.filter(n => n.type === 'osint_confirmed');
-
-    // OSINT Summary
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`TOTAL OSINT HITS: ${osintNodes.length} | GITHUB: ${githubHits.length} | SOCIAL: ${socialHits.length} | OTHER: ${otherHits.length}`, 15, y);
-    y += 15;
-
-    osintNodes.forEach((node, index) => {
-      if (y > 220) { doc.addPage(); y = 20; }
-      
-      // Color-coded background based on source
-      if (node.type === 'github') {
-        doc.setFillColor(240, 240, 245);
-      } else if (node.type === 'social') {
-        doc.setFillColor(245, 250, 255);
-      } else {
-        doc.setFillColor(250, 245, 245);
-      }
-      doc.rect(15, y - 5, 180, 60, 'F');
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(5, 7, 12);
-      const labelLines = doc.splitTextToSize(`${index + 1}. ${node.label}`, 170);
-      doc.text(labelLines[0], 20, y + 5);
-      
-      doc.setFontSize(8);
-      doc.setTextColor(59, 130, 246);
-      doc.setFont('courier', 'normal');
-      const urlText = doc.splitTextToSize(`URL: ${node.id}`, 170);
-      doc.text(urlText.slice(0, 2), 20, y + 12);
-      y += (Math.min(urlText.length, 2) * 4) + 5;
-      doc.setFont('helvetica', 'normal');
-      
-      doc.setTextColor(5, 7, 12);
-      const proofText = doc.splitTextToSize(`INTELLIGENCE: ${node.details?.context || 'Identifier verified in source.'}`, 170);
-      doc.text(proofText.slice(0, 3), 20, y + 5);
-      y += (Math.min(proofText.length, 3) * 4) + 5;
-      
-      if (node.details?.social_intelligence) {
-        doc.setFontSize(7);
-        doc.setTextColor(16, 185, 129);
-        doc.text(`THREAT_LEVEL: ${node.details.social_intelligence.threat_level} | PLATFORM: ${node.details.social_intelligence.source_platform.toUpperCase()}`, 20, y + 5);
-        y += 6;
-      }
-      
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(16, 185, 129);
-      const attrText = doc.splitTextToSize(`ATTRIBUTION: ${node.details?.parent_wallet || rootNode?.id || 'UNKNOWN'}`, 170);
-      doc.text(attrText[0], 20, y + 5);
-      y += 22;
-    });
-
     // Comprehensive Wallet Address Section
     if (y > 180) { doc.addPage(); y = 20; }
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('4. COMPREHENSIVE WALLET ADDRESS CATALOG', 15, y);
+    doc.text('5. COMPREHENSIVE WALLET ADDRESS CATALOG', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 
@@ -1172,7 +1172,7 @@ const App: React.FC = () => {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('5. TECHNICAL APPENDIX', 15, y);
+    doc.text('6. TECHNICAL APPENDIX', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 
@@ -1438,7 +1438,6 @@ const App: React.FC = () => {
             {/* Performance indicator */}
             <div className="text-[8px] text-slate-500 font-mono bg-black/20 px-3 py-2 rounded-lg border border-white/5">
               <div className="text-emerald-400 font-bold">NO API LIMITS</div>
-              <div>Cache: {osintService.getPerformanceMetrics().cacheHitRate}</div>
             </div>
             {nodes.length > 0 && (
               <button onClick={resetGraph} className="bg-gradient-to-r from-slate-800/80 to-slate-700/80 border-2 border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-400/70 px-6 h-16 rounded-3xl transition-all duration-300 flex items-center justify-center shadow-xl backdrop-blur-sm">

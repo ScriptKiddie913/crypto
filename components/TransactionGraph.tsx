@@ -253,7 +253,7 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
       </div>
 
       {hoveredNode && (
-        <div className="fixed pointer-events-none z-50 bg-[#05070c]/98 backdrop-blur-3xl border border-white/10 rounded-xl p-4 shadow-2xl max-w-[320px] animate-in fade-in zoom-in-95 duration-150" style={{ left: Math.min(tooltipPos.x + 16, window.innerWidth - 340), top: Math.min(tooltipPos.y + 16, window.innerHeight - 200) }}>
+        <div className="fixed pointer-events-none z-50 bg-[#05070c]/98 backdrop-blur-3xl border border-white/10 rounded-xl p-3 md:p-4 shadow-2xl max-w-[280px] md:max-w-[320px] text-xs md:text-sm animate-in fade-in zoom-in-95 duration-150" style={{ left: Math.min(Math.max(tooltipPos.x + 16, 10), window.innerWidth - (window.innerWidth < 768 ? 290 : 340)), top: Math.min(Math.max(tooltipPos.y + 16, 10), window.innerHeight - 200) }}>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-3 h-3 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.3)]" style={{ backgroundColor: getNodeColor(hoveredNode) }} />
             <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{hoveredNode.type.replace('_', ' ')}</span>

@@ -25,7 +25,8 @@ import {
   User,
   TrendingDown,
   ArrowRightLeft,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Menu
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { blockchainService } from './services/blockchainService';
@@ -49,6 +50,7 @@ const App: React.FC = () => {
   const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [panelMinimized, setPanelMinimized] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const seenNodes = useRef<Set<string>>(new Set());
   const seenLinks = useRef<Set<string>>(new Set());
@@ -1345,103 +1347,115 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-[#020408] text-slate-200 overflow-hidden font-sans select-none">
       <main className="flex-1 flex flex-col relative bg-[#020408]">
-        <header className="h-28 border-b border-white/5 flex items-center justify-between px-12 bg-[#05070c]/98 backdrop-blur-3xl z-20">
-          <div className="flex items-center gap-5">
-            <div className="bg-emerald-500/5 p-2 rounded-2xl border border-emerald-400/30 shadow-lg">
-               <svg viewBox="0 0 400 400" className="w-10 h-10" fill="none">
-                  <path d="M50 80 L130 50 L160 150 L50 80 Z" stroke="#10b981" strokeWidth="18" strokeLinejoin="round"/>
-                  <path d="M350 80 L270 50 L240 150 L350 80 Z" stroke="#10b981" strokeWidth="18" strokeLinejoin="round"/>
-                  <path d="M80 160 C80 160 100 320 200 320 C300 320 320 160 320 160" stroke="#10b981" strokeWidth="18" strokeLinecap="round"/>
-               </svg>
+        <header className="min-h-16 md:h-28 border-b border-white/5 flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-12 py-3 md:py-0 bg-[#05070c]/98 backdrop-blur-3xl z-20">
+          <div className="flex items-center justify-between w-full md:w-auto">
+            <div className="flex items-center gap-3 md:gap-5">
+              <div className="bg-emerald-500/5 p-1.5 md:p-2 rounded-xl md:rounded-2xl border border-emerald-400/30 shadow-lg">
+                 <svg viewBox="0 0 400 400" className="w-7 h-7 md:w-10 md:h-10" fill="none">
+                    <path d="M50 80 L130 50 L160 150 L50 80 Z" stroke="#10b981" strokeWidth="18" strokeLinejoin="round"/>
+                    <path d="M350 80 L270 50 L240 150 L350 80 Z" stroke="#10b981" strokeWidth="18" strokeLinejoin="round"/>
+                    <path d="M80 160 C80 160 100 320 200 320 C300 320 320 160 320 160" stroke="#10b981" strokeWidth="18" strokeLinecap="round"/>
+                 </svg>
+              </div>
+              <div>
+                <h1 className="font-black text-lg md:text-2xl tracking-tight text-white uppercase italic leading-none">Sotanik_AI</h1>
+                <span className="text-[8px] md:text-[10px] text-emerald-500 uppercase tracking-[0.3em] md:tracking-[0.5em] font-black mt-0.5 md:mt-1 block">Forensic Intelligence</span>
+              </div>
             </div>
-            <div>
-              <h1 className="font-black text-2xl tracking-tight text-white uppercase italic leading-none">Sotanik_AI</h1>
-              <span className="text-[10px] text-emerald-500 uppercase tracking-[0.5em] font-black mt-1 block">Forensic Intelligence</span>
-            </div>
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
+              className="md:hidden p-2 bg-slate-800/50 border border-white/10 rounded-lg text-emerald-400 hover:bg-slate-700/50 transition-all"
+            >
+              <Menu size={20} />
+            </button>
           </div>
 
-          <div className="flex-1 max-w-2xl mx-12 flex items-center gap-6">
+          <div className={`${mobileMenuOpen ? 'flex' : 'hidden md:flex'} flex-col md:flex-row flex-1 md:max-w-2xl w-full md:mx-12 items-stretch md:items-center gap-3 md:gap-6 mt-3 md:mt-0`}>
             <div className="relative flex-1">
-              <Terminal size={20} className="absolute inset-y-0 left-6 flex items-center text-slate-600 my-auto" />
+              <Terminal size={18} className="absolute inset-y-0 left-4 md:left-6 flex items-center text-slate-600 my-auto" />
               <input 
                 type="text" 
                 placeholder="Target ID (Address, Hash, or Scrape Query)..." 
-                className="w-full bg-[#0a0d14]/90 border-2 border-white/10 rounded-3xl py-4 pl-16 pr-8 focus:outline-none text-sm transition-all text-white placeholder-slate-700 font-bold tracking-wider"
+                className="w-full bg-[#0a0d14]/90 border-2 border-white/10 rounded-2xl md:rounded-3xl py-3 md:py-4 pl-12 md:pl-16 pr-6 md:pr-8 focus:outline-none text-xs md:text-sm transition-all text-white placeholder-slate-700 font-bold tracking-wider"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && startInvestigation()}
               />
             </div>
-            <div className="flex items-center gap-3">
-              <button onClick={startInvestigation} className={`${loading ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400' : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400'} text-black px-8 h-12 rounded-2xl text-[10px] font-bold uppercase tracking-wide transition-all flex items-center gap-2`}>
-                {loading ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />}
+            <div className="flex items-center gap-2 md:gap-3">
+              <button onClick={startInvestigation} className={`${loading ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400' : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400'} text-black px-6 md:px-8 h-10 md:h-12 rounded-xl md:rounded-2xl text-[9px] md:text-[10px] font-bold uppercase tracking-wide transition-all flex items-center justify-center gap-2 flex-1 md:flex-initial touch-manipulation`}>
+                {loading ? <RefreshCw className="animate-spin" size={14} /> : <Zap size={14} />}
                 {loading ? "STOP" : "SCAN"}
               </button>
               {nodes.length > 0 && (
-                <button onClick={generateReport} className="bg-slate-700/60 border border-slate-500/40 text-slate-200 hover:text-white hover:border-emerald-400/50 px-6 h-12 rounded-2xl text-[9px] font-bold uppercase tracking-wide transition-all flex items-center gap-2">
-                  <Download size={14} /> REPORT
+                <button onClick={generateReport} className="bg-slate-700/60 border border-slate-500/40 text-slate-200 hover:text-white hover:border-emerald-400/50 px-4 md:px-6 h-10 md:h-12 rounded-xl md:rounded-2xl text-[8px] md:text-[9px] font-bold uppercase tracking-wide transition-all flex items-center justify-center gap-2 flex-1 md:flex-initial touch-manipulation">
+                  <Download size={12} /> REPORT
                 </button>
               )}
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className={`${mobileMenuOpen ? 'flex' : 'hidden md:flex'} flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-2 w-full md:w-auto mt-3 md:mt-0`}>
             {selectedNode && (
-              <div className="flex items-center gap-2">
-                <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center gap-2 px-4 h-10 bg-rose-600/15 hover:bg-rose-500/25 border border-rose-400/40 rounded-xl text-[9px] font-bold text-rose-300 hover:text-rose-200 uppercase tracking-wide transition-all duration-200">
-                  {socialLoading ? <RefreshCw size={12} className="animate-spin" /> : <Globe size={12} />} OSINT
-                </button>
-                
-                <button onClick={handleDeepTrace} className={`flex items-center gap-2 px-4 h-10 rounded-xl text-[9px] font-bold uppercase tracking-wide transition-all duration-200 border ${deepLoading ? 'bg-red-600/25 border-red-400/50 text-red-200' : 'bg-sky-600/15 hover:bg-sky-500/25 border-sky-400/40 text-sky-300 hover:text-sky-200'}`}>
-                  {deepLoading ? <RefreshCw size={12} className="animate-spin" /> : <Layers size={12} />} 
-                  {deepLoading ? 'STOP' : 'DEEP'}
-                </button>
-                
-                <button onClick={toggleHyperMode} className={`flex items-center gap-1 px-3 h-10 rounded-xl text-[8px] font-bold uppercase tracking-wide transition-all duration-200 border ${hyperMode ? 'bg-purple-600/25 border-purple-400/50 text-purple-200' : 'bg-purple-600/15 border-purple-400/40 text-purple-300'}`}>
-                  <Zap size={10} /> HYPER
-                </button>
-                
-                <div className="flex items-center gap-2 bg-slate-900/30 px-3 py-2 rounded-xl border border-slate-700/30">
-                  <span className="text-[8px] font-bold text-slate-400">D:</span>
-                  <input 
-                    type="range" 
-                    min="1" 
-                    max="8" 
-                    value={hyperMode ? 8 : scanDepth}
-                    onChange={(e) => !hyperMode && setScanDepth(Number(e.target.value))}
-                    disabled={hyperMode || deepLoading}
-                    className="w-12 h-1 bg-slate-700 rounded slider"
-                  />
-                  <span className="text-[9px] font-bold text-emerald-400 w-2">{hyperMode ? 8 : scanDepth}</span>
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full md:w-auto">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 h-10 bg-rose-600/15 hover:bg-rose-500/25 border border-rose-400/40 rounded-lg md:rounded-xl text-[8px] md:text-[9px] font-bold text-rose-300 hover:text-rose-200 uppercase tracking-wide transition-all duration-200 flex-1 md:flex-initial touch-manipulation">
+                    {socialLoading ? <RefreshCw size={10} className="animate-spin" /> : <Globe size={10} />} OSINT
+                  </button>
+                  
+                  <button onClick={handleDeepTrace} className={`flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 h-10 rounded-lg md:rounded-xl text-[8px] md:text-[9px] font-bold uppercase tracking-wide transition-all duration-200 border flex-1 md:flex-initial touch-manipulation ${deepLoading ? 'bg-red-600/25 border-red-400/50 text-red-200' : 'bg-sky-600/15 hover:bg-sky-500/25 border-sky-400/40 text-sky-300 hover:text-sky-200'}`}>
+                    {deepLoading ? <RefreshCw size={10} className="animate-spin" /> : <Layers size={10} />} 
+                    {deepLoading ? 'STOP' : 'DEEP'}
+                  </button>
+                  
+                  <button onClick={toggleHyperMode} className={`flex items-center justify-center gap-1 px-2 md:px-3 h-10 rounded-lg md:rounded-xl text-[8px] font-bold uppercase tracking-wide transition-all duration-200 border flex-1 md:flex-initial touch-manipulation ${hyperMode ? 'bg-purple-600/25 border-purple-400/50 text-purple-200' : 'bg-purple-600/15 border-purple-400/40 text-purple-300'}`}>
+                    <Zap size={10} /> HYPER
+                  </button>
                 </div>
                 
-                <div className="bg-slate-900/30 border border-slate-700/30 rounded-lg p-2 flex items-center gap-1">
-                  <span className="text-[7px] text-slate-400 font-bold">📅</span>
-                  <input 
-                    type="date" 
-                    value={dateFilter.startDate}
-                    onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
-                    placeholder="From"
-                  />
-                  <span className="text-[7px] text-slate-500">→</span>
-                  <input 
-                    type="date" 
-                    value={dateFilter.endDate}
-                    onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
-                    placeholder="To"
-                  />
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 bg-slate-900/30 px-3 py-2 rounded-lg md:rounded-xl border border-slate-700/30 flex-1 md:flex-initial">
+                    <span className="text-[8px] font-bold text-slate-400">D:</span>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="8" 
+                      value={hyperMode ? 8 : scanDepth}
+                      onChange={(e) => !hyperMode && setScanDepth(Number(e.target.value))}
+                      disabled={hyperMode || deepLoading}
+                      className="flex-1 md:w-12 h-1 bg-slate-700 rounded slider"
+                    />
+                    <span className="text-[9px] font-bold text-emerald-400 w-2">{hyperMode ? 8 : scanDepth}</span>
+                  </div>
+                  
+                  <div className="bg-slate-900/30 border border-slate-700/30 rounded-lg p-2 flex items-center gap-1 flex-1 md:flex-initial">
+                    <span className="text-[7px] text-slate-400 font-bold">📅</span>
+                    <input 
+                      type="date" 
+                      value={dateFilter.startDate}
+                      onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-16 md:w-20 focus:border-emerald-500 focus:outline-none"
+                      placeholder="From"
+                    />
+                    <span className="text-[7px] text-slate-500">→</span>
+                    <input 
+                      type="date" 
+                      value={dateFilter.endDate}
+                      onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-16 md:w-20 focus:border-emerald-500 focus:outline-none"
+                      placeholder="To"
+                    />
+                  </div>
                 </div>
               </div>
             )}
             {/* Performance indicator */}
-            <div className="text-[8px] text-slate-500 font-mono bg-black/20 px-3 py-2 rounded-lg border border-white/5">
+            <div className="text-[8px] text-slate-500 font-mono bg-black/20 px-3 py-2 rounded-lg border border-white/5 text-center">
               <div className="text-emerald-400 font-bold">NO API LIMITS</div>
             </div>
             {nodes.length > 0 && (
-              <button onClick={resetGraph} className="bg-gradient-to-r from-slate-800/80 to-slate-700/80 border-2 border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-400/70 px-6 h-16 rounded-3xl transition-all duration-300 flex items-center justify-center shadow-xl backdrop-blur-sm">
-                <RefreshCw size={20} />
+              <button onClick={resetGraph} className="bg-gradient-to-r from-slate-800/80 to-slate-700/80 border-2 border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-400/70 px-4 md:px-6 h-10 md:h-16 rounded-2xl md:rounded-3xl transition-all duration-300 flex items-center justify-center shadow-xl backdrop-blur-sm touch-manipulation">
+                <RefreshCw size={18} />
               </button>
             )}
           </div>
@@ -1468,32 +1482,32 @@ const App: React.FC = () => {
                     </svg>
                  </div>
               </div>
-              <h3 className="text-7xl sm:text-8xl md:text-9xl font-black text-[#8e97a3] tracking-tighter uppercase italic mb-6 select-none text-center opacity-90 leading-none">
+              <h3 className="text-4xl sm:text-7xl md:text-8xl lg:text-9xl font-black text-[#8e97a3] tracking-tighter uppercase italic mb-4 md:mb-6 select-none text-center opacity-90 leading-none">
                 SOTANIK_AI
               </h3>
-              <p className="max-w-2xl text-center text-[#4b5563] text-lg sm:text-xl font-medium italic leading-relaxed opacity-80 select-none px-6 uppercase tracking-widest">
+              <p className="max-w-2xl text-center text-[#4b5563] text-sm sm:text-lg md:text-xl font-medium italic leading-relaxed opacity-80 select-none px-4 md:px-6 uppercase tracking-widest">
                 Blockchain Intelligence & Master OSINT Engine
               </p>
             </div>
           )}
 
           {error && (
-            <div className="absolute top-8 left-8 right-8 bg-rose-500/10 border border-rose-500/30 text-rose-400 p-6 rounded-3xl flex items-center gap-6 z-30 backdrop-blur-xl animate-in zoom-in duration-300 shadow-2xl">
-              <AlertTriangle size={28} className="text-rose-500 shrink-0" />
+            <div className="absolute top-4 md:top-8 left-4 md:left-8 right-4 md:right-8 bg-rose-500/10 border border-rose-500/30 text-rose-400 p-4 md:p-6 rounded-2xl md:rounded-3xl flex items-start md:items-center gap-3 md:gap-6 z-30 backdrop-blur-xl animate-in zoom-in duration-300 shadow-2xl">
+              <AlertTriangle size={20} className="text-rose-500 shrink-0 mt-1 md:mt-0" />
               <div className="flex flex-col flex-1">
-                <span className="text-[9px] uppercase font-black tracking-widest text-rose-500">Forensic Fault</span>
-                <span className="text-sm font-bold mt-0.5">{error}</span>
+                <span className="text-[8px] md:text-[9px] uppercase font-black tracking-widest text-rose-500">Forensic Fault</span>
+                <span className="text-xs md:text-sm font-bold mt-0.5">{error}</span>
               </div>
-              <button onClick={() => setError(null)} className="p-3 hover:bg-white/5 rounded-xl transition-colors"><X size={18} /></button>
+              <button onClick={() => setError(null)} className="p-2 md:p-3 hover:bg-white/5 rounded-lg md:rounded-xl transition-colors"><X size={16} /></button>
             </div>
           )}
 
           {selectedNode && (
-            <div className="fixed top-28 left-0 right-0 bottom-0 z-50 flex items-center justify-end pointer-events-none">
+            <div className="fixed top-16 md:top-28 left-0 right-0 bottom-0 z-50 flex items-center justify-center md:justify-end pointer-events-none">
               {/* Backdrop */}
-              <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setSelectedNode(null)} />
+              <div className="absolute inset-0 bg-black/60 md:bg-black/40 pointer-events-auto" onClick={() => setSelectedNode(null)} />
               {/* Panel */}
-              <div className={`relative ${panelMinimized ? 'w-auto' : 'w-[360px] max-w-[95vw]'} ${panelMinimized ? 'h-auto' : 'h-[calc(100vh-8rem)]'} m-4 bg-[#05070c]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in slide-in-from-right-4`}>
+              <div className={`relative ${panelMinimized ? 'w-auto' : 'w-full md:w-[360px] max-w-[95vw]'} ${panelMinimized ? 'h-auto' : 'h-[calc(100vh-5rem)] md:h-[calc(100vh-8rem)]'} m-2 md:m-4 bg-[#05070c]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in slide-in-from-bottom md:slide-in-from-right-4`}>
                 {panelMinimized ? (
                   <div className="p-3 space-y-2">
                     <div className="flex items-center gap-2 mb-2">

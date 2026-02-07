@@ -157,10 +157,19 @@ const App: React.FC = () => {
   };
 
   const expandNode = useCallback(async (nodeId: string, type: string, maxDepth = 1, currentDepth = 0, force = false, rootScanId?: string) => {
-    if (currentDepth >= maxDepth || scanAborted) return;
+    if (currentDepth > maxDepth || scanAborted) return;
     
     const expansionKey = `${nodeId}-depth-${currentDepth}-max-${maxDepth}`;
     if (!force && expandedNodes.current.has(expansionKey)) return;
+    
+    // For deep scans (force=true), clear previous expansion states for this node
+    if (force && currentDepth === 0) {
+      const keysToDelete = Array.from(expandedNodes.current).filter((k: any) => 
+        typeof k === 'string' && k.startsWith(`${nodeId}-depth-`)
+      );
+      keysToDelete.forEach(k => expandedNodes.current.delete(k));
+    }
+    
     expandedNodes.current.add(expansionKey);
     
     // Set scanning indicator for root node
@@ -259,7 +268,7 @@ const App: React.FC = () => {
             addNode(txNode);
             addLink({ source: nodeId, target: txNode.id, value: 2, label: `${amtString} ${unit}` });
             
-            if (currentDepth + 1 < maxDepth && !scanAborted) {
+            if (currentDepth < maxDepth && !scanAborted) {
               await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, force, rootScanId);
             }
           } catch (e) {
@@ -292,7 +301,7 @@ const App: React.FC = () => {
                 };
                 addNode(inNode);
                 addLink({ source: addr, target: nodeId, value: 1, label: valStr });
-                if (currentDepth + 1 < maxDepth && !scanAborted) {
+                if (currentDepth < maxDepth && !scanAborted) {
                   await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, force, rootScanId);
                 }
               }
@@ -312,7 +321,7 @@ const App: React.FC = () => {
                 };
                 addNode(outNode);
                 addLink({ source: nodeId, target: addr, value: 1, label: valStr });
-                if (currentDepth + 1 < maxDepth && !scanAborted) {
+                if (currentDepth < maxDepth && !scanAborted) {
                   await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, force, rootScanId);
                 }
               }
@@ -345,8 +354,13 @@ const App: React.FC = () => {
     setError(null);
     
     try {
-      const depth = hyperMode ? 8 : scanDepth;
+      const depth = hyperMode ? 8 : Math.max(scanDepth, 2); // Minimum depth 2 for meaningful deep scan
+      console.log(`Starting DEEP scan on ${selectedNode.type} (${selectedNode.id.substring(0, 12)}...) with depth: ${depth}`);
       await expandNode(selectedNode.id, selectedNode.type, depth, 0, true, selectedNode.id);
+      console.log(`DEEP scan completed for ${selectedNode.id.substring(0, 12)}...`);
+    } catch (err) {
+      console.error('Deep scan error:', err);
+      setError('Deep scan failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setDeepLoading(false);
       setScanningNodeId(null);
@@ -652,8 +666,8 @@ const App: React.FC = () => {
     setNodes(prev => prev.filter(n => n.id !== nodeId));
     setLinks(prev => prev.filter(l => l.source !== nodeId && l.target !== nodeId));
     seenNodes.current.delete(nodeId);
-    Array.from(expandedNodes.current).forEach(k => { if (k.startsWith(nodeId)) expandedNodes.current.delete(k); });
-    const keysToDelete = Array.from(seenLinks.current).filter(k => k.startsWith(nodeId + '-') || k.endsWith('-' + nodeId));
+    Array.from(expandedNodes.current).forEach((k: any) => { if (typeof k === 'string' && k.startsWith(nodeId)) expandedNodes.current.delete(k); });
+    const keysToDelete = Array.from(seenLinks.current).filter((k: any) => typeof k === 'string' && (k.startsWith(nodeId + '-') || k.endsWith('-' + nodeId)));
     keysToDelete.forEach(k => seenLinks.current.delete(k));
     if (selectedNode?.id === nodeId) setSelectedNode(null);
   }, [selectedNode]);
@@ -1118,7 +1132,7 @@ const App: React.FC = () => {
         });
 
         await Promise.all([
-          expandNode(val, root.type, 1, 0, false), // Depth 1: only direct links to main query
+          expandNode(val, root.type, 2, 0, false), // Depth 2: fetch transactions and their immediate connections
           handleOSINTSweep(val)
         ]);
       } else if (type === SearchType.TX) {
@@ -1166,7 +1180,7 @@ const App: React.FC = () => {
         }
         
         await Promise.all([
-          expandNode(val, 'transaction', 1, 0, false), // Depth 1: only direct links
+          expandNode(val, 'transaction', 2, 0, false), // Depth 2: fetch addresses and their transactions
           handleOSINTSweep(val)
         ]);
       }

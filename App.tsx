@@ -1551,6 +1551,7 @@ const App: React.FC = () => {
                       </div>
                     </div>
                   )}
+                </div>
                   
                   {/* Enhanced display for transaction details */}
                   {selectedNode.type === 'transaction' && (

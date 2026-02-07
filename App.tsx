@@ -48,6 +48,7 @@ const App: React.FC = () => {
   const [scanAborted, setScanAborted] = useState(false);
   const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [panelMinimized, setPanelMinimized] = useState(false);
 
   const seenNodes = useRef<Set<string>>(new Set());
   const seenLinks = useRef<Set<string>>(new Set());
@@ -1166,38 +1167,23 @@ const App: React.FC = () => {
                   <span className="text-[9px] font-bold text-emerald-400 w-2">{hyperMode ? 8 : scanDepth}</span>
                 </div>
                 
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowDateFilter(!showDateFilter)}
-                    className={`text-[8px] font-bold px-2 py-2 rounded-lg transition-all ${showDateFilter ? 'bg-emerald-600/20 text-emerald-400' : 'text-slate-400 hover:text-slate-300'}`}
-                  >
-                    📅
-                  </button>
-                  
-                  {showDateFilter && (
-                    <div className="absolute top-12 left-0 bg-slate-900/95 border border-slate-600/50 rounded-lg p-2 flex items-center gap-1 z-30 backdrop-blur-sm">
-                      <div className="text-[7px] text-slate-400 font-bold">FROM:</div>
-                      <input 
-                        type="date" 
-                        value={dateFilter.startDate}
-                        onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
-                        className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
-                      />
-                      <div className="text-[7px] text-slate-400 font-bold">TO:</div>
-                      <input 
-                        type="date" 
-                        value={dateFilter.endDate}
-                        onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
-                        className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
-                      />
-                      <button 
-                        onClick={() => setShowDateFilter(false)}
-                        className="text-[6px] bg-red-500/20 text-red-400 px-1 py-1 rounded hover:bg-red-500/30"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
+                <div className="bg-slate-900/30 border border-slate-700/30 rounded-lg p-2 flex items-center gap-1">
+                  <span className="text-[7px] text-slate-400 font-bold">📅</span>
+                  <input 
+                    type="date" 
+                    value={dateFilter.startDate}
+                    onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
+                    placeholder="From"
+                  />
+                  <span className="text-[7px] text-slate-500">→</span>
+                  <input 
+                    type="date" 
+                    value={dateFilter.endDate}
+                    onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
+                    placeholder="To"
+                  />
                 </div>
               </div>
             )}
@@ -1260,22 +1246,67 @@ const App: React.FC = () => {
               {/* Backdrop */}
               <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setSelectedNode(null)} />
               {/* Panel */}
-              <div className="relative w-[360px] max-w-[95vw] h-[calc(100vh-2rem)] m-4 bg-[#05070c]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in slide-in-from-right-4">
-                {/* Fixed header */}
-                <div className="flex items-center justify-between p-4 border-b border-white/5 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-400"><Cpu size={14} /></div>
-                    <h2 className="font-bold text-[10px] tracking-wide uppercase text-white">NODE_DATA</h2>
+              <div className={`relative ${panelMinimized ? 'w-auto' : 'w-[360px] max-w-[95vw]'} ${panelMinimized ? 'h-auto' : 'h-[calc(100vh-2rem)]'} m-4 bg-[#05070c]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in slide-in-from-right-4`}>
+                {panelMinimized ? (
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="bg-emerald-500/10 p-1.5 rounded-lg text-emerald-400"><Cpu size={12} /></div>
+                      <span className="text-[8px] font-bold text-white uppercase truncate max-w-[120px]">{selectedNode.id.substring(0, 10)}...</span>
+                      <button 
+                        onClick={() => setPanelMinimized(false)} 
+                        className="w-5 h-5 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/40 rounded flex items-center justify-center text-emerald-400 hover:text-emerald-200 transition-all"
+                        title="Expand"
+                      >
+                        <span className="text-[10px]">⬜</span>
+                      </button>
+                      <button 
+                        onClick={() => setSelectedNode(null)} 
+                        className="w-5 h-5 bg-red-500/20 hover:bg-red-500/40 border border-red-500/40 rounded flex items-center justify-center text-red-400 hover:text-red-200 transition-all"
+                        title="Close"
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center gap-1 px-2 py-1 bg-rose-600/15 hover:bg-rose-500/25 border border-rose-400/40 rounded text-[7px] font-bold text-rose-300 uppercase">
+                        {socialLoading ? <RefreshCw size={8} className="animate-spin" /> : <Globe size={8} />} OSINT
+                      </button>
+                      <button onClick={handleDeepTrace} className={`flex items-center gap-1 px-2 py-1 rounded text-[7px] font-bold uppercase border ${deepLoading ? 'bg-red-600/25 border-red-400/50 text-red-200' : 'bg-sky-600/15 border-sky-400/40 text-sky-300'}`}>
+                        {deepLoading ? <RefreshCw size={8} className="animate-spin" /> : <Layers size={8} />} DEEP
+                      </button>
+                    </div>
                   </div>
-                  <button 
-                    onClick={() => setSelectedNode(null)} 
-                    className="w-7 h-7 bg-red-500/20 hover:bg-red-500/40 border border-red-500/40 rounded-lg flex items-center justify-center text-red-400 hover:text-red-200 transition-all"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-                {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto p-4">
+                ) : (
+                  <>
+                    {/* Fixed header */}
+                    <div className="flex items-center justify-between p-4 border-b border-white/5 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-400"><Cpu size={14} /></div>
+                        <h2 className="font-bold text-[10px] tracking-wide uppercase text-white">NODE_DATA</h2>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => setPanelMinimized(true)} 
+                          className="w-7 h-7 bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/40 rounded-lg flex items-center justify-center text-yellow-400 hover:text-yellow-200 transition-all"
+                          title="Minimize"
+                        >
+                          <span className="text-[12px]">_</span>
+                        </button>
+                        <button 
+                          onClick={() => setSelectedNode(null)} 
+                          className="w-7 h-7 bg-red-500/20 hover:bg-red-500/40 border border-red-500/40 rounded-lg flex items-center justify-center text-red-400 hover:text-red-200 transition-all"
+                          title="Close"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {!panelMinimized && (
+                  <>
+                    {/* Scrollable content */}
+                    <div className="flex-1 overflow-y-auto p-4">
                   <div className="space-y-4">
                 <div className="p-3 bg-[#0a0d14] border border-white/10 rounded-xl break-all mono text-[10px] text-emerald-400 font-bold leading-relaxed shadow-inner">
                   {selectedNode.id}
@@ -1651,11 +1682,13 @@ const App: React.FC = () => {
                 </div>
                 {/* End scrollable content */}
 
-                <div className="pt-4 border-t border-white/5 flex gap-3 shrink-0 p-4">
-                   <button onClick={() => deleteNode(selectedNode.id)} className="flex-1 h-10 bg-gradient-to-r from-rose-600/15 to-rose-500/15 border border-rose-400/30 text-rose-300 hover:text-rose-200 hover:border-rose-400/50 rounded-xl flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-wide hover:from-rose-500/20 hover:to-rose-400/20 transition-all">
-                     <Trash2 size={14} /> REMOVE_NODE
-                   </button>
-                </div>
+                    <div className="pt-4 border-t border-white/5 flex gap-3 shrink-0 p-4">
+                      <button onClick={() => deleteNode(selectedNode.id)} className="flex-1 h-10 bg-gradient-to-r from-rose-600/15 to-rose-500/15 border border-rose-400/30 text-rose-300 hover:text-rose-200 hover:border-rose-400/50 rounded-xl flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-wide hover:from-rose-500/20 hover:to-rose-400/20 transition-all">
+                        <Trash2 size={14} /> REMOVE_NODE
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}

@@ -1,4 +1,3 @@
-
 export interface Transaction {
   txid: string;
   version: number;
@@ -47,7 +46,7 @@ export interface AddressInfo {
 
 export interface NodeData {
   id: string;
-  type: 'address' | 'transaction' | 'block' | 'eth_address' | 'entity';
+  type: 'address' | 'transaction' | 'block' | 'eth_address' | 'entity' | 'social' | 'github' | 'osint_confirmed';
   label: string;
   details?: any;
   riskScore?: number;

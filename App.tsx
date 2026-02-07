@@ -301,9 +301,9 @@ const App: React.FC = () => {
     setNodes(prev => prev.filter(n => n.id !== nodeId));
     setLinks(prev => prev.filter(l => l.source !== nodeId && l.target !== nodeId));
     seenNodes.current.delete(nodeId);
-    Array.from(expandedNodes.current).forEach(k => { if (k.startsWith(nodeId)) expandedNodes.current.delete(k); });
-    const keysToDelete = Array.from(seenLinks.current).filter(k => k.startsWith(nodeId + '-') || k.endsWith('-' + nodeId));
-    keysToDelete.forEach(k => seenLinks.current.delete(k));
+    Array.from(expandedNodes.current).forEach((k: string) => { if (k.startsWith(nodeId)) expandedNodes.current.delete(k); });
+    const keysToDelete = Array.from(seenLinks.current).filter((k: string) => k.startsWith(nodeId + '-') || k.endsWith('-' + nodeId));
+    keysToDelete.forEach((k: string) => seenLinks.current.delete(k));
     if (selectedNode?.id === nodeId) setSelectedNode(null);
   }, [selectedNode]);
 

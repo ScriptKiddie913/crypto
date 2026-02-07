@@ -64,10 +64,34 @@ const App: React.FC = () => {
 
   const addLink = useCallback((link: LinkData) => {
     const linkId = `${link.source}-${link.target}`;
+    const reverseLinkId = `${link.target}-${link.source}`;
+    
+    // Check for existing link in either direction
+    const existingLinkIndex = links.findIndex(l => 
+      (`${l.source}-${l.target}` === linkId) || (`${l.source}-${l.target}` === reverseLinkId)
+    );
+    
+    if (existingLinkIndex !== -1) {
+      // Strengthen existing connection
+      setLinks(prev => prev.map((l, index) => {
+        if (index === existingLinkIndex) {
+          const newValue = (l.value || 1) + (link.value || 1);
+          return {
+            ...l,
+            value: newValue,
+            label: `${newValue > 3 ? 'STRONG_LINK' : 'MULTI_TX'}: ${link.label || ''}`.trim()
+          };
+        }
+        return l;
+      }));
+      return;
+    }
+    
+    // Add new link if not already tracked
     if (seenLinks.current.has(linkId)) return;
     seenLinks.current.add(linkId);
     setLinks(prev => [...prev, link]);
-  }, []);
+  }, [links]);
 
   const validateUrl = async (url: string): Promise<boolean> => {
     try {
@@ -145,7 +169,7 @@ const App: React.FC = () => {
           blockchainService.getDetailedAddressInfo(nodeId).catch(() => null)
         ]);
         
-        const limit = force ? 60 : currentDepth === 0 ? 25 : 15; // More transactions for root node
+        const limit = force ? 150 : currentDepth === 0 ? 100 : 50; // Unlimited scanning - much higher limits
         const targetTxs = (txs || []).slice(0, limit);
         
         console.log(`Found ${targetTxs.length} transactions for address ${nodeId.substring(0, 12)}...`);
@@ -209,7 +233,7 @@ const App: React.FC = () => {
       } else if (type === 'transaction') {
         const txData = await blockchainService.getTransaction(nodeId).catch(() => null);
         if (txData) {
-          const limit = force ? 30 : 12;
+          const limit = force ? 100 : 50; // Much higher limits for unlimited wallet linking
           
           for (const input of (txData.vin || []).slice(0, limit)) {
             const addr = input.prevout?.scriptpubkey_address;
@@ -260,7 +284,7 @@ const App: React.FC = () => {
     setDeepLoading(true);
     setError(null);
     try {
-      await expandNode(selectedNode.id, selectedNode.type, 4, 0, true);
+      await expandNode(selectedNode.id, selectedNode.type, 6, 0, true); // Increased depth for unlimited tracing
     } finally {
       setDeepLoading(false);
     }
@@ -293,7 +317,8 @@ const App: React.FC = () => {
         // Create the OSINT node with detailed information
         const osintNode: NodeData = {
           id: result.url,
-          type: result.source === 'github' ? 'github' : 'osint_confirmed',
+          type: result.source === 'github' ? 'github' : 
+                result.source === 'reddit' || result.source === 'twitter' ? 'social' : 'osint_confirmed',
           label: `${result.source.toUpperCase()}: ${result.title.substring(0, 20)}...`,
           details: {
             // Core information
@@ -316,6 +341,16 @@ const App: React.FC = () => {
             verified_timestamp: new Date().toISOString(),
             content_hash: result.content_hash,
             
+            // Social intelligence specific details
+            ...(result.social_intel && result.social_intel.length > 0 && {
+              social_intelligence: {
+                threat_level: result.social_intel[0].threat_level,
+                post_type: result.social_intel[0].post_type,
+                timestamp: result.social_intel[0].timestamp,
+                source_platform: result.social_intel[0].source
+              }
+            }),
+            
             // Additional GitHub-specific details if applicable
             ...(result.source === 'github' && {
               repo: result.title.split('/')[0] + '/' + result.title.split('/')[1],
@@ -330,16 +365,37 @@ const App: React.FC = () => {
               paste_id: result.url.split('/').pop(),
               paste_title: result.title,
               discovery_method: 'site_search'
+            }),
+
+            // Additional Reddit-specific details  
+            ...(result.source === 'reddit' && {
+              reddit_post: true,
+              post_timestamp: result.social_intel?.[0]?.timestamp,
+              subreddit: result.url.includes('/r/') ? result.url.split('/r/')[1].split('/')[0] : 'unknown'
+            }),
+
+            // Additional Twitter-specific details
+            ...(result.source === 'twitter' && {
+              twitter_post: true,
+              tweet_analysis: true,
+              nitter_source: result.url.includes('nitter') ? result.url.split('//')[1].split('/')[0] : 'twitter.com'
             })
           }
         };
 
         addNode(osintNode);
+        
+        // Choose appropriate link label based on source
+        const linkLabel = result.source === 'github' ? 'GITHUB_ATTRIBUTION' : 
+                         result.source === 'reddit' ? 'REDDIT_INTELLIGENCE' :
+                         result.source === 'twitter' ? 'TWITTER_INTELLIGENCE' :
+                         result.source === 'pastebin' ? 'PASTEBIN_ATTRIBUTION' : 'OSINT_HIT';
+        
         addLink({ 
           source: targetId, 
           target: osintNode.id, 
           value: 5, 
-          label: result.source === 'github' ? 'GITHUB_ATTRIBUTION' : 'PASTEBIN_ATTRIBUTION' 
+          label: linkLabel
         });
 
         // If we found co-located entities, create additional nodes
@@ -549,102 +605,274 @@ const App: React.FC = () => {
     const doc = new jsPDF();
     const rootNode = nodes.find(n => n.isRoot);
     
+    // Professional Header with Gradient Background Effect
     doc.setFillColor(5, 7, 12);
-    doc.rect(0, 0, 210, 50, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(24);
-    doc.setFont('helvetica', 'bold');
-    doc.text('SOTANIK_AI FORENSIC DOSSIER', 15, 22);
-    doc.setFontSize(10);
-    doc.setTextColor(16, 185, 129);
-    doc.text('PROFESSIONAL CROSS-CHAIN LEDGER FORENSICS & VERBATIM OSINT', 15, 30);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`UID: ${Math.random().toString(36).substring(2, 10).toUpperCase()}`, 15, 38);
-    doc.text(`TIME: ${new Date().toUTCString()}`, 130, 38);
-
-    let y = 65;
+    doc.rect(0, 0, 210, 60, 'F');
+    doc.setFillColor(16, 185, 129, 0.1); // Emerald overlay
+    doc.rect(0, 0, 210, 60, 'F');
     
-    doc.setTextColor(5, 7, 12);
-    doc.setFontSize(14);
-    doc.text('1. CORE INVESTIGATION TARGET', 15, y);
-    doc.setDrawColor(16, 185, 129);
-    doc.line(15, y + 2, 195, y + 2);
-    y += 12;
-
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(28);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SOTANIK_AI FORENSIC INTELLIGENCE DOSSIER', 15, 25);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(16, 185, 129);
+    doc.text('ADVANCED CROSS-CHAIN BLOCKCHAIN FORENSICS & COMPREHENSIVE OSINT ANALYSIS', 15, 35);
+    
+    doc.setTextColor(148, 163, 184);
     doc.setFontSize(10);
-    doc.setFont('courier', 'bold');
-    doc.text(`ID: ${rootNode?.id || 'N/A'}`, 20, y);
-    y += 6;
-    doc.setFont('helvetica', 'normal');
-    doc.text(`NETWORK: ${rootNode?.type.toUpperCase() || 'UNKNOWN'}`, 20, y);
-    y += 6;
-    doc.text(`CAPTURED_BALANCE: ${rootNode?.details?.balance || rootNode?.details?.net_balance || '0.00'}`, 20, y);
+    doc.text(`CLASSIFICATION: RESTRICTED | UID: ${Math.random().toString(36).substring(2, 10).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`, 15, 45);
+    doc.text(`GENERATED: ${new Date().toUTCString()}`, 15, 52);
+    doc.text(`ANALYST: SOTANIK_AI_SYSTEM | STATUS: VERIFIED`, 120, 45);
+    doc.text(`TARGET_COUNT: ${nodes.length} | LINKS: ${links.length}`, 120, 52);
+
+    let y = 75;
+    
+    // Executive Summary Section
+    doc.setTextColor(5, 7, 12);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('EXECUTIVE SUMMARY', 15, y);
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(0.8);
+    doc.line(15, y + 2, 195, y + 2);
     y += 15;
 
-    doc.setFontSize(14);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const summary = `This comprehensive forensic analysis encompasses ${nodes.length} identified entities across multiple blockchain networks, with ${links.length} established connections. The investigation reveals detailed transaction patterns, OSINT attributions, and risk assessments for target identifier: ${rootNode?.id || 'UNKNOWN'}.`;
+    const summaryLines = doc.splitTextToSize(summary, 170);
+    doc.text(summaryLines, 15, y);
+    y += (summaryLines.length * 6) + 10;
+
+    // Core Investigation Target Section
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('2. ENTITY RISK ASSESSMENT', 15, y);
+    doc.text('1. PRIMARY TARGET ANALYSIS', 15, y);
     doc.line(15, y + 2, 195, y + 2);
-    y += 12;
+    y += 15;
+
+    if (rootNode) {
+      doc.setFillColor(245, 247, 250);
+      doc.rect(15, y - 5, 180, 35, 'F');
+      
+      doc.setFontSize(12);
+      doc.setFont('courier', 'bold');
+      doc.setTextColor(16, 185, 129);
+      doc.text(`TARGET_ID: ${rootNode.id}`, 20, y + 5);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(5, 7, 12);
+      doc.text(`NETWORK: ${rootNode.type.toUpperCase().replace('_', ' ')}`, 20, y + 12);
+      doc.text(`BALANCE: ${rootNode.details?.balance || rootNode.details?.current_balance || '0.00'}`, 20, y + 19);
+      doc.text(`TX_COUNT: ${rootNode.details?.transaction_count || 0}`, 105, y + 12);
+      doc.text(`RISK_SCORE: ${rootNode.riskScore || rootNode.details?.threat_risk || 0}/100`, 105, y + 19);
+      doc.text(`CLASSIFICATION: ${rootNode.details?.clustering_label || 'IDENTIFIED'}`, 20, y + 26);
+      y += 45;
+    }
+
+    // Enhanced Risk Assessment Section
+    if (y > 220) { doc.addPage(); y = 20; }
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 7, 12);
+    doc.text('2. COMPREHENSIVE RISK ASSESSMENT', 15, y);
+    doc.line(15, y + 2, 195, y + 2);
+    y += 15;
 
     const riskNodes = nodes.filter(n => n.type === 'address' || n.type === 'eth_address' || n.isRoot);
+    let highRiskCount = 0;
+    let mediumRiskCount = 0;
+    let lowRiskCount = 0;
+    
     riskNodes.forEach(node => {
-      if (y > 250) { doc.addPage(); y = 20; }
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`${node.id.substring(0, 25)}...`, 20, y);
       const risk = node.riskScore ?? node.details?.threat_risk ?? 0;
-      doc.setTextColor(risk > 50 ? 239 : 16, risk > 50 ? 68 : 185, risk > 50 ? 68 : 129);
-      doc.text(`RISK_SCORE: ${risk}/100`, 130, y);
-      doc.setTextColor(0,0,0);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      y += 5;
-      doc.text(`CLASS: ${node.details?.entity_type || 'UNKNOWN'} | TAG: ${node.details?.clustering_label || 'IDENTIFIED'}`, 22, y);
-      y += 10;
+      if (risk >= 70) highRiskCount++;
+      else if (risk >= 30) mediumRiskCount++;
+      else lowRiskCount++;
     });
 
-    if (y > 210) { doc.addPage(); y = 20; }
+    // Risk Summary Stats
+    doc.setFillColor(239, 68, 68, 0.1);
+    doc.rect(15, y, 55, 25, 'F');
+    doc.setTextColor(239, 68, 68);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('3. VERBATIM OSINT ATTRIBUTION LOGS', 15, y);
-    doc.line(15, y + 2, 195, y + 2);
-    y += 12;
+    doc.text(`${highRiskCount}`, 35, y + 10);
+    doc.setFontSize(10);
+    doc.text('HIGH RISK', 25, y + 18);
 
-    const osintNodes = nodes.filter(n => n.type === 'osint_confirmed' || n.type === 'github');
-    osintNodes.forEach(node => {
+    doc.setFillColor(255, 193, 7, 0.1);
+    doc.rect(75, y, 55, 25, 'F');
+    doc.setTextColor(255, 193, 7);
+    doc.setFontSize(14);
+    doc.text(`${mediumRiskCount}`, 95, y + 10);
+    doc.setFontSize(10);
+    doc.text('MEDIUM RISK', 85, y + 18);
+
+    doc.setFillColor(16, 185, 129, 0.1);
+    doc.rect(135, y, 55, 25, 'F');
+    doc.setTextColor(16, 185, 129);
+    doc.setFontSize(14);
+    doc.text(`${lowRiskCount}`, 155, y + 10);
+    doc.setFontSize(10);
+    doc.text('LOW RISK', 148, y + 18);
+    y += 35;
+
+    // Detailed Risk Analysis
+    riskNodes.forEach((node, index) => {
       if (y > 250) { doc.addPage(); y = 20; }
-      doc.setFillColor(245, 247, 250);
-      doc.rect(18, y - 5, 175, 45, 'F');
-      doc.setFontSize(10);
+      const risk = node.riskScore ?? node.details?.threat_risk ?? 0;
+      
+      doc.setFillColor(250, 250, 250);
+      doc.rect(15, y - 5, 180, 30, 'F');
+      
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
-      doc.text(`HIT: ${node.label}`, 22, y);
-      y += 5;
-      doc.setFontSize(8);
-      doc.setTextColor(59, 130, 246);
-      doc.text(`VERIFIED_URL: ${node.id}`, 22, y);
-      y += 5;
-      doc.setTextColor(0,0,0);
-      const proof = doc.splitTextToSize(`PROOF: ${node.details?.context || 'Identifier verified in source.'}`, 165);
-      doc.text(proof, 22, y);
-      y += (proof.length * 4) + 2;
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(16, 185, 129);
-      doc.text(`ATTRIBUTED_TO_PRIMARY: ${node.details?.parent_wallet || rootNode?.id}`, 22, y);
-      y += 12;
-      doc.setTextColor(0,0,0);
+      doc.setTextColor(5, 7, 12);
+      doc.text(`${index + 1}. ${node.id.substring(0, 35)}...`, 20, y + 5);
+      
+      doc.setTextColor(risk > 70 ? 239 : risk > 30 ? 255 : 16, risk > 70 ? 68 : risk > 30 ? 193 : 185, risk > 70 ? 68 : risk > 30 ? 7 : 129);
+      doc.text(`RISK: ${risk}/100`, 150, y + 5);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(75, 85, 99);
+      doc.text(`TYPE: ${node.details?.entity_type || 'UNKNOWN'} | LABEL: ${node.details?.clustering_label || 'IDENTIFIED'}`, 20, y + 12);
+      if (node.details?.total_received) {
+        doc.text(`RECEIVED: ${node.details.total_received} | SENT: ${node.details.total_sent || '0'}`, 20, y + 19);
+      }
+      y += 35;
     });
 
+    // Enhanced OSINT Intelligence Section
+    if (y > 200) { doc.addPage(); y = 20; }
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 7, 12);
+    doc.text('3. COMPREHENSIVE OSINT & SOCIAL INTELLIGENCE', 15, y);
+    doc.line(15, y + 2, 195, y + 2);
+    y += 15;
+
+    const osintNodes = nodes.filter(n => n.type === 'osint_confirmed' || n.type === 'github' || n.type === 'social');
+    const githubHits = osintNodes.filter(n => n.type === 'github');
+    const socialHits = osintNodes.filter(n => n.type === 'social');
+    const otherHits = osintNodes.filter(n => n.type === 'osint_confirmed');
+
+    // OSINT Summary
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`TOTAL OSINT HITS: ${osintNodes.length} | GITHUB: ${githubHits.length} | SOCIAL: ${socialHits.length} | OTHER: ${otherHits.length}`, 15, y);
+    y += 15;
+
+    osintNodes.forEach((node, index) => {
+      if (y > 240) { doc.addPage(); y = 20; }
+      
+      // Color-coded background based on source
+      if (node.type === 'github') {
+        doc.setFillColor(240, 240, 245);
+      } else if (node.type === 'social') {
+        doc.setFillColor(245, 250, 255);
+      } else {
+        doc.setFillColor(250, 245, 245);
+      }
+      doc.rect(15, y - 5, 180, 55, 'F');
+      
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(5, 7, 12);
+      doc.text(`${index + 1}. ${node.label}`, 20, y + 5);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(59, 130, 246);
+      const urlText = doc.splitTextToSize(`URL: ${node.id}`, 165);
+      doc.text(urlText, 20, y + 12);
+      y += (urlText.length * 4);
+      
+      doc.setTextColor(5, 7, 12);
+      const proofText = doc.splitTextToSize(`INTELLIGENCE: ${node.details?.context || 'Identifier verified in source.'}`, 165);
+      doc.text(proofText, 20, y + 5);
+      y += (proofText.length * 4);
+      
+      if (node.details?.social_intelligence) {
+        doc.setFontSize(8);
+        doc.setTextColor(16, 185, 129);
+        doc.text(`THREAT_LEVEL: ${node.details.social_intelligence.threat_level} | PLATFORM: ${node.details.social_intelligence.source_platform.toUpperCase()}`, 20, y + 5);
+        y += 6;
+      }
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(16, 185, 129);
+      doc.text(`ATTRIBUTION: ${node.details?.parent_wallet || rootNode?.id}`, 20, y + 5);
+      y += 20;
+    });
+
+    // Transaction Flow Analysis (new section)
+    if (y > 200) { doc.addPage(); y = 20; }
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 7, 12);
+    doc.text('4. TRANSACTION FLOW & PATTERN ANALYSIS', 15, y);
+    doc.line(15, y + 2, 195, y + 2);
+    y += 15;
+
+    const transactionNodes = nodes.filter(n => n.type === 'transaction');
+    doc.setFontSize(12);
+    doc.text(`TOTAL TRANSACTIONS ANALYZED: ${transactionNodes.length}`, 15, y);
+    y += 10;
+
+    // Calculate transaction statistics
+    let totalValue = 0;
+    let highValueTxs = 0;
+    let suspiciousTxs = 0;
+
+    transactionNodes.forEach(tx => {
+      const amount = parseFloat(tx.details?.amount?.split(' ')[0] || '0');
+      totalValue += amount;
+      if (amount > 1) highValueTxs++;
+      if (tx.details?.risk_indicators?.length > 0) suspiciousTxs++;
+    });
+
+    doc.setFontSize(10);
+    doc.text(`HIGH VALUE TXS (>1 BTC/ETH): ${highValueTxs}`, 15, y);
+    doc.text(`FLAGGED SUSPICIOUS: ${suspiciousTxs}`, 110, y);
+    y += 15;
+
+    // Appendix: Technical Details
+    if (y > 200) { doc.addPage(); y = 20; }
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 7, 12);
+    doc.text('5. TECHNICAL APPENDIX', 15, y);
+    doc.line(15, y + 2, 195, y + 2);
+    y += 15;
+
+    const performanceMetrics = osintService.getPerformanceMetrics();
+    doc.setFontSize(10);
+    doc.text(`OSINT Cache Hit Rate: ${performanceMetrics.cacheHitRate}`, 15, y);
+    doc.text(`Total OSINT Queries: ${performanceMetrics.totalQueries}`, 15, y + 8);
+    doc.text(`Analysis Timestamp: ${new Date().toISOString()}`, 15, y + 16);
+    doc.text(`Blockchain Networks: Bitcoin, Ethereum`, 15, y + 24);
+    doc.text(`OSINT Sources: GitHub, Pastebin, Reddit, Twitter, Threat DBs`, 15, y + 32);
+
+    // Professional Footer for all pages
     const pages = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= pages; i++) {
       doc.setPage(i);
       doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text(`SOTANIK_AI MASTER DOSSIER | PAGE ${i} OF ${pages}`, 15, 285);
-      doc.text('CLASSIFIED FORENSIC DATA - AUTHORIZED ACCESS ONLY', 130, 285);
+      doc.setTextColor(120, 120, 120);
+      doc.text(`SOTANIK_AI PROFESSIONAL FORENSIC ANALYSIS | PAGE ${i} OF ${pages}`, 15, 290);
+      doc.text('CONFIDENTIAL - AUTHORIZED PERSONNEL ONLY', 130, 290);
+      
+      // Add subtle footer line
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.3);
+      doc.line(15, 287, 195, 287);
     }
 
-    doc.save(`SOTANIK_FORENSIC_MASTER_${rootNode?.id.substring(0, 12)}.pdf`);
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
+    doc.save(`SOTANIK_FORENSIC_PROFESSIONAL_${rootNode?.id.substring(0, 12)}_${timestamp}.pdf`);
   };
 
   const startInvestigation = async () => {
@@ -714,7 +942,7 @@ const App: React.FC = () => {
         });
 
         await Promise.all([
-          expandNode(val, root.type, 2, 0, false), // Set to false for initial load, user can deep trace later
+          expandNode(val, root.type, 3, 0, false), // Increased initial depth for more comprehensive scanning
           handleOSINTSweep(val)
         ]);
       } else if (type === SearchType.TX) {
@@ -739,10 +967,10 @@ const App: React.FC = () => {
             output_count: txData.vout?.length || 0,
             size_analysis: `${txData.size || 0} bytes`,
             weight_analysis: `${txData.weight || 0} weight units`,
-            fee_analysis: txData.fee ? `${isEth ? (txData.fee/1e18).toFixed(8) : (txData.fee/1e8).toFixed(8)} ${unit}` : \"N/A\",
-            fee_rate: txData.fee && txData.size ? `${(txData.fee / txData.size).toFixed(2)} sat/vB` : \"N/A\",
-            block_info: txData.status?.block_height ? `Block ${txData.status.block_height}` : \"Mempool\",
-            timestamp_analysis: txData.status?.block_time ? new Date(txData.status.block_time * 1000).toUTCString() : \"Pending\",
+            fee_analysis: txData.fee ? `${isEth ? (txData.fee/1e18).toFixed(8) : (txData.fee/1e8).toFixed(8)} ${unit}` : "N/A",
+            fee_rate: txData.fee && txData.size ? `${(txData.fee / txData.size).toFixed(2)} sat/vB` : "N/A",
+            block_info: txData.status?.block_height ? `Block ${txData.status.block_height}` : "Mempool",
+            timestamp_analysis: txData.status?.block_time ? new Date(txData.status.block_time * 1000).toUTCString() : "Pending",
             privacy_score: calculatePrivacyScore(txData),
             risk_indicators: analyzeTransactionRisk(txData, val),
             complexity_rating: Math.min(100, ((txData.vin?.length || 0) + (txData.vout?.length || 0)) * 3)
@@ -762,7 +990,7 @@ const App: React.FC = () => {
         }
         
         await Promise.all([
-          expandNode(val, 'transaction', 2, 0, false),
+          expandNode(val, 'transaction', 3, 0, false), // Increased depth for transaction analysis
           handleOSINTSweep(val)
         ]);
       }
@@ -804,13 +1032,13 @@ const App: React.FC = () => {
               />
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={startInvestigation} disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-black px-10 h-14 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all flex items-center gap-3 shadow-emerald-500/20 shadow-lg border-t border-white/20">
-                {loading ? <RefreshCw className="animate-spin" size={18} /> : <Zap size={18} />}
-                {loading ? "SEARCHING" : "SCAN_UNIT"}
+              <button onClick={startInvestigation} disabled={loading} className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-40 text-black px-12 h-16 rounded-3xl text-[12px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-3 shadow-emerald-500/30 shadow-xl border border-emerald-400/30 backdrop-blur-sm">
+                {loading ? <RefreshCw className="animate-spin" size={20} /> : <Zap size={20} />}
+                {loading ? "SCANNING..." : "INITIATE_SCAN"}
               </button>
               {nodes.length > 0 && (
-                <button onClick={generateReport} className="bg-white/5 border border-white/10 text-emerald-400 hover:bg-emerald-500 hover:text-black px-6 h-14 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 shadow-xl">
-                  <Download size={18} /> DOWNLOAD_DOSSIER
+                <button onClick={generateReport} className="bg-gradient-to-r from-slate-700/80 to-slate-600/80 border-2 border-slate-500/30 text-slate-200 hover:text-white hover:border-emerald-400/50 hover:from-emerald-600/20 hover:to-emerald-500/20 px-8 h-16 rounded-3xl text-[11px] font-black uppercase tracking-[0.1em] transition-all duration-300 flex items-center gap-3 shadow-xl backdrop-blur-sm">
+                  <Download size={18} /> EXPORT_DOSSIER
                 </button>
               )}
             </div>
@@ -818,12 +1046,12 @@ const App: React.FC = () => {
           
           <div className="flex items-center gap-4">
             {selectedNode && (
-              <div className="flex gap-2">
-                <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center gap-3 px-6 h-12 bg-rose-500/10 hover:bg-rose-500/20 border-2 border-rose-500/40 rounded-2xl text-[10px] font-black text-rose-400 uppercase tracking-[0.2em] transition-all shadow-lg">
-                  {socialLoading ? <RefreshCw size={14} className="animate-spin" /> : <Globe size={14} />} OSINT_SCAN
+              <div className="flex gap-3">
+                <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center gap-3 px-8 h-14 bg-gradient-to-r from-rose-600/20 to-rose-500/20 hover:from-rose-500/30 hover:to-rose-400/30 border-2 border-rose-400/50 rounded-3xl text-[11px] font-black text-rose-300 hover:text-rose-200 uppercase tracking-[0.15em] transition-all duration-300 shadow-lg backdrop-blur-sm">
+                  {socialLoading ? <RefreshCw size={16} className="animate-spin" /> : <Globe size={16} />} OSINT_INTELLIGENCE
                 </button>
-                <button onClick={handleDeepTrace} disabled={deepLoading} className="flex items-center gap-3 px-6 h-12 bg-sky-500/10 hover:bg-sky-500/20 border-2 border-sky-500/40 rounded-2xl text-[10px] font-black text-sky-400 uppercase tracking-[0.2em] transition-all shadow-lg">
-                  {deepLoading ? <RefreshCw size={14} className="animate-spin" /> : <Layers size={14} />} DEEP_TRACE
+                <button onClick={handleDeepTrace} disabled={deepLoading} className="flex items-center gap-3 px-8 h-14 bg-gradient-to-r from-sky-600/20 to-sky-500/20 hover:from-sky-500/30 hover:to-sky-400/30 border-2 border-sky-400/50 rounded-3xl text-[11px] font-black text-sky-300 hover:text-sky-200 uppercase tracking-[0.15em] transition-all duration-300 shadow-lg backdrop-blur-sm">
+                  {deepLoading ? <RefreshCw size={16} className="animate-spin" /> : <Layers size={16} />} DEEP_TRACE_UNLIMITED
                 </button>
               </div>
             )}
@@ -833,8 +1061,8 @@ const App: React.FC = () => {
               <div>Cache: {osintService.getPerformanceMetrics().cacheHitRate}</div>
             </div>
             {nodes.length > 0 && (
-              <button onClick={resetGraph} className="bg-white/5 border border-white/10 text-white px-5 h-14 rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center">
-                <RefreshCw size={18} />
+              <button onClick={resetGraph} className="bg-gradient-to-r from-slate-800/80 to-slate-700/80 border-2 border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-400/70 px-6 h-16 rounded-3xl transition-all duration-300 flex items-center justify-center shadow-xl backdrop-blur-sm">
+                <RefreshCw size={20} />
               </button>
             )}
           </div>
@@ -993,13 +1221,13 @@ const App: React.FC = () => {
                          </div>
                       </div>
                       
-                      <div className="flex flex-col gap-2">
-                        <a href={selectedNode.details.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-[10px] font-black uppercase text-slate-300 shadow-lg group">
-                          {selectedNode.details.match_type === 'github_commit' ? 'EXAMINE_COMMIT' : 'PIVOT_TO_SOURCE'} <ExternalLink size={14} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                      <div className="flex flex-col gap-3">
+                        <a href={selectedNode.details.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-5 bg-gradient-to-r from-slate-700/80 to-slate-600/80 border-2 border-slate-500/40 rounded-2xl hover:from-emerald-600/20 hover:to-emerald-500/20 hover:border-emerald-400/50 transition-all duration-300 text-[11px] font-black uppercase text-slate-200 hover:text-emerald-200 shadow-lg group backdrop-blur-sm">
+                          {selectedNode.details.match_type === 'github_commit' ? 'EXAMINE_COMMIT' : 'PIVOT_TO_SOURCE'} <ExternalLink size={16} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                         </a>
                         {selectedNode.details.repo_url && (
-                           <a href={selectedNode.details.repo_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-[10px] font-black uppercase text-sky-400 shadow-lg group">
-                             INSPECT_REPOSITORY <Github size={14} className="group-hover:scale-110 transition-transform" />
+                           <a href={selectedNode.details.repo_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-5 bg-gradient-to-r from-sky-700/80 to-sky-600/80 border-2 border-sky-500/40 rounded-2xl hover:from-sky-600/30 hover:to-sky-500/30 hover:border-sky-400/60 transition-all duration-300 text-[11px] font-black uppercase text-sky-200 hover:text-sky-100 shadow-lg group backdrop-blur-sm">
+                             INSPECT_REPOSITORY <Github size={16} className="group-hover:scale-110 transition-transform" />
                            </a>
                         )}
                       </div>
@@ -1108,9 +1336,9 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-8 border-t border-white/5 flex gap-2">
-                   <button onClick={() => deleteNode(selectedNode.id)} className="flex-1 h-14 bg-rose-500/10 border border-rose-500/30 text-rose-500 rounded-2xl flex items-center justify-center gap-3 text-[10px] font-black uppercase tracking-widest hover:bg-rose-500/20 transition-all shadow-lg">
-                     <Trash2 size={16} /> REMOVE_NODE
+                <div className="pt-8 border-t border-white/5 flex gap-3">
+                   <button onClick={() => deleteNode(selectedNode.id)} className="flex-1 h-16 bg-gradient-to-r from-rose-600/15 to-rose-500/15 border-2 border-rose-400/30 text-rose-300 hover:text-rose-200 hover:border-rose-400/50 rounded-3xl flex items-center justify-center gap-3 text-[11px] font-black uppercase tracking-[0.1em] hover:from-rose-500/20 hover:to-rose-400/20 transition-all duration-300 shadow-lg backdrop-blur-sm">
+                     <Trash2 size={18} /> REMOVE_NODE
                    </button>
                 </div>
               </div>

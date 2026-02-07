@@ -220,7 +220,7 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
       <svg ref={svgRef} className="w-full h-full" />
       
       <div className="absolute bottom-10 left-10 flex flex-col gap-4 bg-[#05070c]/95 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/5 shadow-2xl z-20 pointer-events-none border-l-4" style={{ borderColor: 'rgba(16, 185, 129, 0.4)' }}>
-        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] mb-4 opacity-70">FORENSIC_INDEX</h4>
+        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] mb-4 opacity-70">INDEX</h4>
         <div className="space-y-4">
           <LegendItem color="#f97316" label="ROOT_TARGET" icon={ICONS.ROOT} />
           <LegendItem color="#ef4444" label="OSINT_HIT" icon={ICONS.INTEL} />

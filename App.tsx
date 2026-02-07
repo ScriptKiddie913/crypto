@@ -103,8 +103,8 @@ const App: React.FC = () => {
       // For Pastebin URLs, validate format
       if (urlObj.hostname.includes('pastebin.com')) {
         const path = urlObj.pathname;
-        // Valid pattern: /xxxxx where xxxxx is alphanumeric paste ID
-        const validPattern = /^\/[a-zA-Z0-9]{8}$/;
+        // Valid pattern: /xxxxx where xxxxx is alphanumeric paste ID (typically 6-12 chars)
+        const validPattern = /^\/[a-zA-Z0-9]{6,12}$/;
         if (!validPattern.test(path) && !path.startsWith('/raw/')) {
           console.warn(`Invalid Pastebin URL pattern: ${path}`);
           return false;

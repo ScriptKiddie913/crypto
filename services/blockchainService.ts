@@ -92,7 +92,7 @@ export const blockchainService = {
     const hits: any[] = [];
     try {
       // 1. Search Code with Text Matches (extracts actual code snippets)
-      const codeRes = await fetch(`https://api.github.com/search/code?q="${encodeURIComponent(query)}"&per_page=10`, {
+      const codeRes = await fetch(`https://api.github.com/search/code?q=${encodeURIComponent(query)}&per_page=10`, {
         headers: { 'Accept': 'application/vnd.github.v3.text-match+json' }
       });
       if (codeRes.ok) {
@@ -144,7 +144,7 @@ export const blockchainService = {
       }
 
       // 2. Search Commits (identifies matches in commit messages)
-      const commitRes = await fetch(`https://api.github.com/search/commits?q="${encodeURIComponent(query)}"&per_page=5`, {
+      const commitRes = await fetch(`https://api.github.com/search/commits?q=${encodeURIComponent(query)}&per_page=5`, {
         headers: { 'Accept': 'application/vnd.github.cloak-preview' }
       });
       if (commitRes.ok) {

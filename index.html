@@ -2,9 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Sotanik Crypto Hub | Professional Ledger Forensics</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            screens: {
+              'xs': '475px',
+            }
+          }
+        }
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -12,6 +26,11 @@
       :root {
         --bg-color: #020408;
       }
+      
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+      
       body {
         font-family: 'Inter', sans-serif;
         background-color: var(--bg-color);
@@ -21,32 +40,53 @@
         overflow: hidden;
         width: 100vw;
         height: 100vh;
+        height: 100dvh; /* Dynamic viewport height for mobile */
         position: fixed;
+        touch-action: pan-y;
+        overscroll-behavior: none;
       }
+      
       #root {
         width: 100vw;
         height: 100vh;
+        height: 100dvh; /* Dynamic viewport height for mobile */
         overflow: hidden;
         position: relative;
       }
-      .mono { font-family: 'JetBrains Mono', monospace; }
-      ::-webkit-scrollbar {
-        width: 4px;
+      
+      .mono { 
+        font-family: 'JetBrains Mono', monospace; 
       }
+      
+      /* Custom scrollbar - thinner on mobile */
+      ::-webkit-scrollbar {
+        width: 3px;
+      }
+      
+      @media (min-width: 768px) {
+        ::-webkit-scrollbar {
+          width: 4px;
+        }
+      }
+      
       ::-webkit-scrollbar-track {
         background: transparent;
       }
+      
       ::-webkit-scrollbar-thumb {
         background: #1e293b;
         border-radius: 10px;
       }
+      
       @keyframes pulse-emerald {
         0%, 100% { box-shadow: 0 0 20px 0px rgba(16, 185, 129, 0.2); }
         50% { box-shadow: 0 0 50px 15px rgba(16, 185, 129, 0.1); }
       }
+      
       .animate-pulse-slow {
         animation: pulse-emerald 4s infinite ease-in-out;
       }
+      
       .workspace-bg {
         background: radial-gradient(circle at center, #0a0d14 0%, #020408 100%);
         position: absolute;
@@ -54,7 +94,25 @@
         z-index: -1;
       }
       
-      /* Custom Slider Styles */
+      /* Touch-friendly interactions */
+      button, a, input[type=\"range\"] {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+      
+      /* Improved input on mobile */
+      input[type=\"text\"], input[type=\"date\"] {
+        font-size: 16px; /* Prevents zoom on iOS */
+      }
+      
+      @media (min-width: 640px) {
+        input[type=\"text\"], input[type=\"date\"] {
+          font-size: inherit;
+        }
+      }
+      
+      /* Custom Slider Styles - touch friendly */
       .slider {
         -webkit-appearance: none;
         appearance: none;
@@ -62,34 +120,54 @@
         outline: none;
         border-radius: 4px;
         transition: all 0.2s ease;
-        height: 4px;
+        height: 6px; /* Larger for mobile */
+      }
+      
+      @media (min-width: 768px) {
+        .slider {
+          height: 4px;
+        }
       }
       
       .slider::-webkit-slider-thumb {
         -webkit-appearance: none;
         appearance: none;
-        width: 12px;
-        height: 12px;
+        width: 16px;
+        height: 16px;
         border-radius: 50%;
         background: linear-gradient(135deg, #10b981, #059669);
         cursor: pointer;
-        box-shadow: 0 1px 4px rgba(16, 185, 129, 0.4);
+        box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
         transition: all 0.2s ease;
+      }
+      
+      @media (min-width: 768px) {
+        .slider::-webkit-slider-thumb {
+          width: 12px;
+          height: 12px;
+        }
       }
       
       .slider::-webkit-slider-thumb:hover {
         transform: scale(1.1);
-        box-shadow: 0 2px 6px rgba(16, 185, 129, 0.6);
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.6);
       }
       
       .slider::-moz-range-thumb {
-        width: 12px;
-        height: 12px;
+        width: 16px;
+        height: 16px;
         border-radius: 50%;
         background: linear-gradient(135deg, #10b981, #059669);
         cursor: pointer;
         border: none;
-        box-shadow: 0 1px 4px rgba(16, 185, 129, 0.4);
+        box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+      }
+      
+      @media (min-width: 768px) {
+        .slider::-moz-range-thumb {
+          width: 12px;
+          height: 12px;
+        }
       }
       
       .scrollbar-hide {
@@ -99,6 +177,22 @@
       
       .scrollbar-hide::-webkit-scrollbar {
         display: none;
+      }
+      
+      /* Safe area insets for notched devices */
+      @supports (padding: max(0px)) {
+        body {
+          padding-left: max(0px, env(safe-area-inset-left));
+          padding-right: max(0px, env(safe-area-inset-right));
+        }
+      }
+      
+      /* Prevent bounce/rubber-banding on iOS */
+      body, html {
+        position: fixed;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
       }
     </style>
   <script type="importmap">

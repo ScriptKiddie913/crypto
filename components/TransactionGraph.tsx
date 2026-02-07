@@ -150,7 +150,21 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
           const gEnter = enter.append("g")
             .attr("class", "node")
             .style("cursor", "pointer")
-            .on("click", (event, d) => onNodeClick(d))
+            .on("click", (event, d) => {
+              // Prevent click after drag on touch devices
+              if (event.defaultPrevented) return;
+              onNodeClick(d);
+            })
+            .on("touchstart", (event, d) => {
+              // Show tooltip on touch
+              setHoveredNode(d);
+              const touch = event.touches[0];
+              setTooltipPos({ x: touch.clientX, y: touch.clientY });
+            })
+            .on("touchend", () => {
+              // Hide tooltip after a delay on touch end
+              setTimeout(() => setHoveredNode(null), 2000);
+            })
             .on("mouseover", (event, d) => {
               setHoveredNode(d);
               setTooltipPos({ x: event.clientX, y: event.clientY });
@@ -164,7 +178,15 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
                 if (!event.active) simulation.alphaTarget(0.3).restart();
                 d.fx = d.x; d.fy = d.y;
               })
-              .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+              .on("drag", (event, d) => { 
+                d.fx = event.x; 
+                d.fy = event.y;
+                // Update tooltip position during drag
+                if (event.sourceEvent.type.includes('touch')) {
+                  const touch = event.sourceEvent.touches[0];
+                  setTooltipPos({ x: touch.clientX, y: touch.clientY });
+                }
+              })
               .on("end", (event, d) => {
                 if (!event.active) simulation.alphaTarget(0);
                 d.fx = null; d.fy = null;
@@ -236,12 +258,13 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
   }, [nodes, links, onNodeClick, selectedNodeId, scanningNodeId]);
 
   return (
-    <div ref={containerRef} className="w-full h-full relative bg-transparent overflow-hidden">
+    <div ref={containerRef} className="w-full h-full relative bg-transparent overflow-hidden touch-none">
       <svg ref={svgRef} className="w-full h-full" />
       
-      <div className="absolute bottom-10 left-10 flex flex-col gap-4 bg-[#05070c]/95 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/5 shadow-2xl z-20 pointer-events-none border-l-4" style={{ borderColor: 'rgba(16, 185, 129, 0.4)' }}>
-        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] mb-4 opacity-70">INDEX</h4>
-        <div className="space-y-4">
+      {/* Responsive legend - hidden on mobile, compact on tablet, full on desktop */}
+      <div className="hidden lg:flex absolute bottom-6 sm:bottom-8 md:bottom-10 left-4 sm:left-6 md:left-10 flex-col gap-2 sm:gap-3 md:gap-4 bg-[#05070c]/95 backdrop-blur-3xl p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl md:rounded-[2.5rem] border border-white/5 shadow-2xl z-20 pointer-events-none border-l-4" style={{ borderColor: 'rgba(16, 185, 129, 0.4)' }}>
+        <h4 className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] sm:tracking-[0.5em] mb-2 sm:mb-3 md:mb-4 opacity-70">INDEX</h4>
+        <div className="space-y-2 sm:space-y-3 md:space-y-4">
           <LegendItem color="#f97316" label="ROOT_TARGET" icon={ICONS.ROOT} />
           <LegendItem color="#ef4444" label="OSINT_HIT" icon={ICONS.INTEL} />
           <LegendItem color="#ffffff" label="GIT_SOURCE" icon={ICONS.GITHUB} />
@@ -252,46 +275,50 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
         </div>
       </div>
 
+      {/* Mobile-friendly tooltip */}
       {hoveredNode && (
-        <div className="fixed pointer-events-none z-50 bg-[#05070c]/98 backdrop-blur-3xl border border-white/10 rounded-xl p-4 shadow-2xl max-w-[320px] animate-in fade-in zoom-in-95 duration-150" style={{ left: Math.min(tooltipPos.x + 16, window.innerWidth - 340), top: Math.min(tooltipPos.y + 16, window.innerHeight - 200) }}>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-3 h-3 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.3)]" style={{ backgroundColor: getNodeColor(hoveredNode) }} />
-            <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{hoveredNode.type.replace('_', ' ')}</span>
+        <div className="fixed pointer-events-none z-50 bg-[#05070c]/98 backdrop-blur-3xl border border-white/10 rounded-xl p-3 sm:p-4 shadow-2xl w-[calc(100vw-2rem)] sm:w-auto max-w-[calc(100vw-2rem)] sm:max-w-[320px] animate-in fade-in zoom-in-95 duration-150" style={{ 
+          left: window.innerWidth < 640 ? '1rem' : Math.min(tooltipPos.x + 16, window.innerWidth - 340), 
+          top: window.innerWidth < 640 ? '5rem' : Math.min(tooltipPos.y + 16, window.innerHeight - 200) 
+        }}>
+          <div className=\"flex items-center gap-2 mb-2\">
+            <div className=\"w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.3)]\" style={{ backgroundColor: getNodeColor(hoveredNode) }} />
+            <span className=\"text-[8px] sm:text-[9px] font-bold uppercase text-slate-400 tracking-wider\">{hoveredNode.type.replace('_', ' ')}</span>
           </div>
-          <p className="text-[11px] mono text-white font-bold break-all leading-relaxed mb-2">{hoveredNode.id}</p>
+          <p className=\"text-[10px] sm:text-[11px] mono text-white font-bold break-all leading-relaxed mb-2\">{hoveredNode.id}</p>
           
           {/* Show balance for wallet nodes */}
           {(hoveredNode.details?.balance || hoveredNode.details?.current_balance) && (
-            <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-2">
+            <div className="p-1.5 sm:p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-2">
               <div className="text-[7px] text-emerald-400 font-bold uppercase">BALANCE</div>
-              <div className="text-[12px] font-bold text-emerald-300">{hoveredNode.details.balance || hoveredNode.details.current_balance}</div>
+              <div className="text-[11px] sm:text-[12px] font-bold text-emerald-300">{hoveredNode.details.balance || hoveredNode.details.current_balance}</div>
             </div>
           )}
           
           {/* Show amount for transaction nodes */}
           {hoveredNode.details?.amount && (
-            <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg mb-2">
+            <div className="p-1.5 sm:p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg mb-2">
               <div className="text-[7px] text-blue-400 font-bold uppercase">AMOUNT</div>
-              <div className="text-[12px] font-bold text-blue-300">{hoveredNode.details.amount}</div>
+              <div className="text-[11px] sm:text-[12px] font-bold text-blue-300">{hoveredNode.details.amount}</div>
             </div>
           )}
           
           {/* Show flow value */}
           {hoveredNode.details?.flow && (
-            <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-2">
+            <div className="p-1.5 sm:p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-2">
               <div className="text-[7px] text-yellow-400 font-bold uppercase">{hoveredNode.details.role || 'FLOW'}</div>
-              <div className="text-[12px] font-bold text-yellow-300">{hoveredNode.details.flow}</div>
+              <div className="text-[11px] sm:text-[12px] font-bold text-yellow-300">{hoveredNode.details.flow}</div>
             </div>
           )}
           
           {/* Show tx count */}
           {hoveredNode.details?.transaction_count && (
-            <div className="text-[8px] text-slate-400">TX Count: <span className="text-white font-bold">{hoveredNode.details.transaction_count}</span></div>
+            <div className="text-[7px] sm:text-[8px] text-slate-400">TX Count: <span className="text-white font-bold">{hoveredNode.details.transaction_count}</span></div>
           )}
           
           {hoveredNode.details?.context && (
-            <div className="p-2 bg-emerald-500/5 border border-emerald-500/10 rounded-lg mt-2">
-              <p className="text-[9px] text-emerald-400 leading-relaxed italic truncate">"{hoveredNode.details.context}"</p>
+            <div className="p-1.5 sm:p-2 bg-emerald-500/5 border border-emerald-500/10 rounded-lg mt-2">
+              <p className="text-[8px] sm:text-[9px] text-emerald-400 leading-relaxed italic line-clamp-2">"{hoveredNode.details.context}"</p>
             </div>
           )}
         </div>
@@ -301,13 +328,13 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
 };
 
 const LegendItem = ({ color, label, icon }: { color: string, label: string, icon: string }) => (
-  <div className="flex items-center gap-5">
-    <div className="w-10 h-10 rounded-2xl border border-white/5 flex items-center justify-center bg-white/5 shadow-inner" style={{ color: color }}>
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <div className="flex items-center gap-3 sm:gap-4 md:gap-5">
+    <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-xl sm:rounded-2xl border border-white/5 flex items-center justify-center bg-white/5 shadow-inner shrink-0" style={{ color: color }}>
+      <svg viewBox="0 0 24 24" width="16" height="16" className="sm:w-[17px] sm:h-[17px] md:w-[18px] md:h-[18px]" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d={icon} />
       </svg>
     </div>
-    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em] leading-none">{label}</span>
+    <span className="text-[9px] sm:text-[10px] font-bold text-slate-300 uppercase tracking-[0.15em] sm:tracking-[0.2em] leading-none">{label}</span>
   </div>
 );
 

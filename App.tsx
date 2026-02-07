@@ -1283,7 +1283,7 @@ const App: React.FC = () => {
         });
 
         await Promise.all([
-          expandNode(val, root.type, 1, 0, false, undefined, false), // Depth 1: only direct transactions linked to wallet
+          expandNode(val, root.type, 0, 0, false, undefined, false), // Depth 0: ONLY direct transactions, no address expansion
           handleOSINTSweep(val)
         ]);
       } else if (type === SearchType.TX) {
@@ -1331,7 +1331,7 @@ const App: React.FC = () => {
         }
         
         await Promise.all([
-          expandNode(val, 'transaction', 1, 0, false, undefined, false), // Depth 1: only direct addresses from transaction
+          expandNode(val, 'transaction', 0, 0, false, undefined, false), // Depth 0: ONLY direct addresses, no transaction expansion
           handleOSINTSweep(val)
         ]);
       }
@@ -1345,63 +1345,70 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-[#020408] text-slate-200 overflow-hidden font-sans select-none">
       <main className="flex-1 flex flex-col relative bg-[#020408]">
-        <header className="h-28 border-b border-white/5 flex items-center justify-between px-12 bg-[#05070c]/98 backdrop-blur-3xl z-20">
-          <div className="flex items-center gap-5">
-            <div className="bg-emerald-500/5 p-2 rounded-2xl border border-emerald-400/30 shadow-lg">
-               <svg viewBox="0 0 400 400" className="w-10 h-10" fill="none">
-                  <path d="M50 80 L130 50 L160 150 L50 80 Z" stroke="#10b981" strokeWidth="18" strokeLinejoin="round"/>
-                  <path d="M350 80 L270 50 L240 150 L350 80 Z" stroke="#10b981" strokeWidth="18" strokeLinejoin="round"/>
-                  <path d="M80 160 C80 160 100 320 200 320 C300 320 320 160 320 160" stroke="#10b981" strokeWidth="18" strokeLinecap="round"/>
-               </svg>
+        <header className="h-auto min-h-[7rem] md:h-28 border-b border-white/5 flex flex-col md:flex-row items-center justify-between px-3 sm:px-6 md:px-12 py-4 md:py-0 bg-[#05070c]/98 backdrop-blur-3xl z-20 gap-3 md:gap-0">
+          <div className="flex items-center gap-3 md:gap-5 w-full md:w-auto justify-between md:justify-start">
+            <div className="flex items-center gap-2 md:gap-5">
+              <div className="bg-emerald-500/5 p-1.5 sm:p-2 rounded-xl md:rounded-2xl border border-emerald-400/30 shadow-lg">
+                 <svg viewBox="0 0 400 400" className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10" fill="none">
+                    <path d="M50 80 L130 50 L160 150 L50 80 Z" stroke="#10b981" strokeWidth="18" strokeLinejoin="round"/>
+                    <path d="M350 80 L270 50 L240 150 L350 80 Z" stroke="#10b981" strokeWidth="18" strokeLinejoin="round"/>
+                    <path d="M80 160 C80 160 100 320 200 320 C300 320 320 160 320 160" stroke="#10b981" strokeWidth="18" strokeLinecap="round"/>
+                 </svg>
+              </div>
+              <div>
+                <h1 className="font-black text-base sm:text-xl md:text-2xl tracking-tight text-white uppercase italic leading-none">Sotanik_AI</h1>
+                <span className="text-[8px] sm:text-[9px] md:text-[10px] text-emerald-500 uppercase tracking-[0.3em] md:tracking-[0.5em] font-black mt-0.5 md:mt-1 block">Forensic Intelligence</span>
+              </div>
             </div>
-            <div>
-              <h1 className="font-black text-2xl tracking-tight text-white uppercase italic leading-none">Sotanik_AI</h1>
-              <span className="text-[10px] text-emerald-500 uppercase tracking-[0.5em] font-black mt-1 block">Forensic Intelligence</span>
-            </div>
+            {nodes.length > 0 && (
+              <button onClick={resetGraph} className="md:hidden bg-gradient-to-r from-slate-800/80 to-slate-700/80 border-2 border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-400/70 p-2.5 rounded-xl transition-all duration-300 flex items-center justify-center shadow-xl backdrop-blur-sm">
+                <RefreshCw size={16} />
+              </button>
+            )}
           </div>
 
-          <div className="flex-1 max-w-2xl mx-12 flex items-center gap-6">
+          <div className="flex-1 w-full md:max-w-2xl md:mx-6 lg:mx-12 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 md:gap-6">
             <div className="relative flex-1">
-              <Terminal size={20} className="absolute inset-y-0 left-6 flex items-center text-slate-600 my-auto" />
+              <Terminal size={16} className="absolute inset-y-0 left-3 sm:left-4 md:left-6 flex items-center text-slate-600 my-auto" />
               <input 
                 type="text" 
                 placeholder="Target ID (Address, Hash, or Scrape Query)..." 
-                className="w-full bg-[#0a0d14]/90 border-2 border-white/10 rounded-3xl py-4 pl-16 pr-8 focus:outline-none text-sm transition-all text-white placeholder-slate-700 font-bold tracking-wider"
+                className="w-full bg-[#0a0d14]/90 border-2 border-white/10 rounded-xl sm:rounded-2xl md:rounded-3xl py-3 sm:py-3.5 md:py-4 pl-10 sm:pl-12 md:pl-16 pr-4 sm:pr-6 md:pr-8 focus:outline-none text-xs sm:text-sm transition-all text-white placeholder-slate-700 font-bold tracking-wider"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && startInvestigation()}
               />
             </div>
-            <div className="flex items-center gap-3">
-              <button onClick={startInvestigation} className={`${loading ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400' : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400'} text-black px-8 h-12 rounded-2xl text-[10px] font-bold uppercase tracking-wide transition-all flex items-center gap-2`}>
-                {loading ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button onClick={startInvestigation} className={`${loading ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400' : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400'} text-black px-4 sm:px-6 md:px-8 h-11 sm:h-11 md:h-12 rounded-xl md:rounded-2xl text-[9px] sm:text-[10px] font-bold uppercase tracking-wide transition-all flex items-center justify-center gap-1.5 sm:gap-2 flex-1 sm:flex-initial min-w-[100px]`}>
+                {loading ? <RefreshCw className="animate-spin" size={14} /> : <Zap size={14} />}
                 {loading ? "STOP" : "SCAN"}
               </button>
               {nodes.length > 0 && (
-                <button onClick={generateReport} className="bg-slate-700/60 border border-slate-500/40 text-slate-200 hover:text-white hover:border-emerald-400/50 px-6 h-12 rounded-2xl text-[9px] font-bold uppercase tracking-wide transition-all flex items-center gap-2">
-                  <Download size={14} /> REPORT
+                <button onClick={generateReport} className="bg-slate-700/60 border border-slate-500/40 text-slate-200 hover:text-white hover:border-emerald-400/50 px-3 sm:px-4 md:px-6 h-11 sm:h-11 md:h-12 rounded-xl md:rounded-2xl text-[8px] sm:text-[9px] font-bold uppercase tracking-wide transition-all flex items-center justify-center gap-1.5 sm:gap-2 flex-1 sm:flex-initial">
+                  <Download size={12} className="sm:inline" /> <span className="hidden xs:inline">REPORT</span><span className="xs:hidden">PDF</span>
                 </button>
               )}
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="w-full md:w-auto flex flex-col md:flex-row items-stretch md:items-center gap-2 overflow-x-auto">
             {selectedNode && (
-              <div className="flex items-center gap-2">
-                <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center gap-2 px-4 h-10 bg-rose-600/15 hover:bg-rose-500/25 border border-rose-400/40 rounded-xl text-[9px] font-bold text-rose-300 hover:text-rose-200 uppercase tracking-wide transition-all duration-200">
-                  {socialLoading ? <RefreshCw size={12} className="animate-spin" /> : <Globe size={12} />} OSINT
+              <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1">
+                <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center gap-1.5 px-3 sm:px-4 h-9 sm:h-10 bg-rose-600/15 hover:bg-rose-500/25 border border-rose-400/40 rounded-lg sm:rounded-xl text-[8px] sm:text-[9px] font-bold text-rose-300 hover:text-rose-200 uppercase tracking-wide transition-all duration-200 whitespace-nowrap">
+                  {socialLoading ? <RefreshCw size={11} className="animate-spin" /> : <Globe size={11} />} <span className="hidden xs:inline">OSINT</span>
                 </button>
                 
-                <button onClick={handleDeepTrace} className={`flex items-center gap-2 px-4 h-10 rounded-xl text-[9px] font-bold uppercase tracking-wide transition-all duration-200 border ${deepLoading ? 'bg-red-600/25 border-red-400/50 text-red-200' : 'bg-sky-600/15 hover:bg-sky-500/25 border-sky-400/40 text-sky-300 hover:text-sky-200'}`}>
-                  {deepLoading ? <RefreshCw size={12} className="animate-spin" /> : <Layers size={12} />} 
+                <button onClick={handleDeepTrace} className={`flex items-center gap-1.5 px-3 sm:px-4 h-9 sm:h-10 rounded-lg sm:rounded-xl text-[8px] sm:text-[9px] font-bold uppercase tracking-wide transition-all duration-200 border whitespace-nowrap ${deepLoading ? 'bg-red-600/25 border-red-400/50 text-red-200' : 'bg-sky-600/15 hover:bg-sky-500/25 border-sky-400/40 text-sky-300 hover:text-sky-200'}`}>
+                  {deepLoading ? <RefreshCw size={11} className="animate-spin" /> : <Layers size={11} />} 
                   {deepLoading ? 'STOP' : 'DEEP'}
                 </button>
                 
-                <button onClick={toggleHyperMode} className={`flex items-center gap-1 px-3 h-10 rounded-xl text-[8px] font-bold uppercase tracking-wide transition-all duration-200 border ${hyperMode ? 'bg-purple-600/25 border-purple-400/50 text-purple-200' : 'bg-purple-600/15 border-purple-400/40 text-purple-300'}`}>
-                  <Zap size={10} /> HYPER
+                <button onClick={toggleHyperMode} className={`flex items-center gap-1 px-2.5 sm:px-3 h-9 sm:h-10 rounded-lg sm:rounded-xl text-[7px] sm:text-[8px] font-bold uppercase tracking-wide transition-all duration-200 border whitespace-nowrap ${hyperMode ? 'bg-purple-600/25 border-purple-400/50 text-purple-200' : 'bg-purple-600/15 border-purple-400/40 text-purple-300'}`}>
+                  <Zap size={9} /> <span className="hidden xs:inline">HYPER</span>
                 </button>
                 
-                <div className="flex items-center gap-2 bg-slate-900/30 px-3 py-2 rounded-xl border border-slate-700/30">
+                <div className="hidden sm:flex items-center gap-2 bg-slate-900/30 px-2.5 py-2 rounded-xl border border-slate-700/30">
                   <span className="text-[8px] font-bold text-slate-400">D:</span>
                   <input 
                     type="range" 
@@ -1410,18 +1417,18 @@ const App: React.FC = () => {
                     value={hyperMode ? 8 : scanDepth}
                     onChange={(e) => !hyperMode && setScanDepth(Number(e.target.value))}
                     disabled={hyperMode || deepLoading}
-                    className="w-12 h-1 bg-slate-700 rounded slider"
+                    className="w-10 sm:w-12 h-1 bg-slate-700 rounded slider"
                   />
                   <span className="text-[9px] font-bold text-emerald-400 w-2">{hyperMode ? 8 : scanDepth}</span>
                 </div>
                 
-                <div className="bg-slate-900/30 border border-slate-700/30 rounded-lg p-2 flex items-center gap-1">
+                <div className="hidden lg:flex bg-slate-900/30 border border-slate-700/30 rounded-lg p-1.5 sm:p-2 items-center gap-1">
                   <span className="text-[7px] text-slate-400 font-bold">📅</span>
                   <input 
                     type="date" 
                     value={dateFilter.startDate}
                     onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
+                    className="text-[7px] sm:text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-16 sm:w-20 focus:border-emerald-500 focus:outline-none"
                     placeholder="From"
                   />
                   <span className="text-[7px] text-slate-500">→</span>
@@ -1429,19 +1436,19 @@ const App: React.FC = () => {
                     type="date" 
                     value={dateFilter.endDate}
                     onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
+                    className="text-[7px] sm:text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-16 sm:w-20 focus:border-emerald-500 focus:outline-none"
                     placeholder="To"
                   />
                 </div>
               </div>
             )}
             {/* Performance indicator */}
-            <div className="text-[8px] text-slate-500 font-mono bg-black/20 px-3 py-2 rounded-lg border border-white/5">
+            <div className="hidden lg:block text-[8px] text-slate-500 font-mono bg-black/20 px-3 py-2 rounded-lg border border-white/5">
               <div className="text-emerald-400 font-bold">NO API LIMITS</div>
             </div>
             {nodes.length > 0 && (
-              <button onClick={resetGraph} className="bg-gradient-to-r from-slate-800/80 to-slate-700/80 border-2 border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-400/70 px-6 h-16 rounded-3xl transition-all duration-300 flex items-center justify-center shadow-xl backdrop-blur-sm">
-                <RefreshCw size={20} />
+              <button onClick={resetGraph} className="hidden md:flex bg-gradient-to-r from-slate-800/80 to-slate-700/80 border-2 border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-400/70 px-4 md:px-6 h-12 md:h-16 rounded-2xl md:rounded-3xl transition-all duration-300 items-center justify-center shadow-xl backdrop-blur-sm">
+                <RefreshCw size={18} />
               </button>
             )}
           </div>
@@ -1457,47 +1464,49 @@ const App: React.FC = () => {
               scanningNodeId={scanningNodeId}
             />
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-[#020408]">
-              <div className="relative mb-14">
+            <div className="w-full h-full flex flex-col items-center justify-center bg-[#020408] px-4">
+              <div className="relative mb-8 md:mb-14">
                  <div className="absolute inset-0 bg-emerald-500/5 blur-[100px] rounded-full scale-90"></div>
-                 <div className="bg-[#05070c] p-10 rounded-[2.5rem] border border-white/10 shadow-2xl relative z-10 animate-pulse-slow">
-                    <svg viewBox="0 0 100 100" className="w-24 h-24 sm:w-32 sm:h-32" fill="none" stroke="#10b981" strokeWidth="1.2">
+                 <div className="bg-[#05070c] p-6 sm:p-8 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-white/10 shadow-2xl relative z-10 animate-pulse-slow">
+                    <svg viewBox="0 0 100 100" className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 lg:w-32 lg:h-32" fill="none" stroke="#10b981" strokeWidth="1.2">
                        <path d="M50 15 L85 35 L85 75 L50 95 L15 75 L15 35 Z" strokeOpacity="0.3"/>
                        <path d="M50 55 L50 95" strokeOpacity="0.8" />
                        <circle cx="50" cy="55" r="1.5" fill="#10b981" />
                     </svg>
                  </div>
               </div>
-              <h3 className="text-7xl sm:text-8xl md:text-9xl font-black text-[#8e97a3] tracking-tighter uppercase italic mb-6 select-none text-center opacity-90 leading-none">
+              <h3 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl font-black text-[#8e97a3] tracking-tighter uppercase italic mb-3 sm:mb-4 md:mb-6 select-none text-center opacity-90 leading-none">
                 SOTANIK_AI
               </h3>
-              <p className="max-w-2xl text-center text-[#4b5563] text-lg sm:text-xl font-medium italic leading-relaxed opacity-80 select-none px-6 uppercase tracking-widest">
+              <p className="max-w-2xl text-center text-[#4b5563] text-xs sm:text-base md:text-lg lg:text-xl font-medium italic leading-relaxed opacity-80 select-none px-4 sm:px-6 uppercase tracking-wider md:tracking-widest">
                 Blockchain Intelligence & Master OSINT Engine
               </p>
             </div>
           )}
 
           {error && (
-            <div className="absolute top-8 left-8 right-8 bg-rose-500/10 border border-rose-500/30 text-rose-400 p-6 rounded-3xl flex items-center gap-6 z-30 backdrop-blur-xl animate-in zoom-in duration-300 shadow-2xl">
-              <AlertTriangle size={28} className="text-rose-500 shrink-0" />
-              <div className="flex flex-col flex-1">
-                <span className="text-[9px] uppercase font-black tracking-widest text-rose-500">Forensic Fault</span>
-                <span className="text-sm font-bold mt-0.5">{error}</span>
+            <div className="absolute top-4 sm:top-6 md:top-8 left-3 sm:left-6 md:left-8 right-3 sm:right-6 md:right-8 bg-rose-500/10 border border-rose-500/30 text-rose-400 p-4 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl flex items-start sm:items-center gap-3 sm:gap-4 md:gap-6 z-30 backdrop-blur-xl animate-in zoom-in duration-300 shadow-2xl">
+              <AlertTriangle size={20} className="sm:hidden text-rose-500 shrink-0 mt-0.5" />
+              <AlertTriangle size={24} className="hidden sm:block md:hidden text-rose-500 shrink-0" />
+              <AlertTriangle size={28} className="hidden md:block text-rose-500 shrink-0" />
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="text-[8px] sm:text-[9px] uppercase font-black tracking-widest text-rose-500">Forensic Fault</span>
+                <span className="text-xs sm:text-sm font-bold mt-0.5 break-words">{error}</span>
               </div>
-              <button onClick={() => setError(null)} className="p-3 hover:bg-white/5 rounded-xl transition-colors"><X size={18} /></button>
+              <button onClick={() => setError(null)} className="p-2 sm:p-3 hover:bg-white/5 rounded-lg sm:rounded-xl transition-colors shrink-0"><X size={16} className="sm:hidden" /><X size={18} className="hidden sm:block" /></button>
             </div>
           )}
 
           {selectedNode && (
-            <div className="fixed top-28 left-0 right-0 bottom-0 z-50 flex items-center justify-end pointer-events-none">
+            <div className="fixed top-0 md:top-28 left-0 right-0 bottom-0 z-50 flex items-end md:items-center justify-center md:justify-end pointer-events-none">
               {/* Backdrop */}
               <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setSelectedNode(null)} />
-              {/* Panel */}
-              <div className={`relative ${panelMinimized ? 'w-auto' : 'w-[360px] max-w-[95vw]'} ${panelMinimized ? 'h-auto' : 'h-[calc(100vh-8rem)]'} m-4 bg-[#05070c]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in slide-in-from-right-4`}>
+              {/* Panel - Bottom sheet on mobile, side panel on desktop */}
+              <div className={`relative ${panelMinimized ? 'w-auto' : 'w-full md:w-[400px] lg:w-[440px] max-w-full md:max-w-[95vw]'} ${panelMinimized ? 'h-auto' : 'h-[70vh] md:h-[calc(100vh-8rem)]'} m-0 md:m-4 bg-[#05070c]/98 backdrop-blur-2xl border-t md:border border-white/10 rounded-t-3xl md:rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in ${panelMinimized ? '' : 'slide-in-from-bottom md:slide-in-from-right-4'}`}>
                 {panelMinimized ? (
-                  <div className="p-3 space-y-2">
+                  <div className="p-3 md:p-3 space-y-2">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="bg-emerald-500/10 p-1.5 rounded-lg text-emerald-400"><Cpu size={12} /></div>
+                      <div className="bg-emerald-500/10 p-1.5 rounded-lg text-emerald-400"><Cpu size={14} /></div>
                       <span className="text-[8px] font-bold text-white uppercase truncate max-w-[120px]">{selectedNode.id.substring(0, 10)}...</span>
                       <button 
                         onClick={() => setPanelMinimized(false)} 
@@ -1552,39 +1561,47 @@ const App: React.FC = () => {
                 )}
                 {!panelMinimized && (
                   <>
+                    {/* Mobile drag handle */}
+                    <div className="md:hidden flex justify-center py-2 border-b border-white/5 shrink-0">
+                      <div className="w-12 h-1 bg-white/20 rounded-full"></div>
+                    </div>
+                    
                     {/* Scrollable content */}
-                    <div className="flex-1 overflow-y-auto p-4">
-                  <div className="space-y-4">
-                <div className="p-3 bg-[#0a0d14] border border-white/10 rounded-xl break-all mono text-[10px] text-emerald-400 font-bold leading-relaxed shadow-inner">
+                    <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4" style={{WebkitOverflowScrolling: 'touch'}}>
+                  <div className="space-y-3 sm:space-y-4">
+                <div className="p-2.5 sm:p-3 bg-[#0a0d14] border border-white/10 rounded-xl break-all mono text-[9px] sm:text-[10px] text-emerald-400 font-bold leading-relaxed shadow-inner">
                   {selectedNode.id}
                 </div>
                 
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-white/5 border border-white/5 rounded-lg p-3">
-                    <span className="text-[8px] uppercase font-bold text-slate-500 block">TYPE</span>
-                    <span className="text-[10px] font-bold text-slate-100 uppercase block">{selectedNode.type.replace('_', ' ')}</span>
+                <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                  <div className="bg-white/5 border border-white/5 rounded-lg p-2 sm:p-3">
+                    <span className="text-[7px] sm:text-[8px] uppercase font-bold text-slate-500 block">TYPE</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-100 uppercase block truncate">{selectedNode.type.replace('_', ' ')}</span>
                   </div>
-                  <div className="bg-white/5 border border-white/5 rounded-lg p-3">
-                    <span className="text-[8px] uppercase font-bold text-slate-500 block">RISK</span>
-                    <span className={`text-[10px] font-bold uppercase block ${selectedNode.riskScore > 50 ? 'text-rose-400' : 'text-emerald-500'}`}>{selectedNode.riskScore ?? 0}/100</span>
+                  <div className="bg-white/5 border border-white/5 rounded-lg p-2 sm:p-3">
+                    <span className="text-[7px] sm:text-[8px] uppercase font-bold text-slate-500 block">RISK</span>
+                    <span className={`text-[9px] sm:text-[10px] font-bold uppercase block ${selectedNode.riskScore > 50 ? 'text-rose-400' : 'text-emerald-500'}`}>{selectedNode.riskScore ?? 0}/100</span>
                   </div>
                 </div>
 
                 {selectedNode.details?.osint && (
-                  <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                    <label className="text-[9px] uppercase tracking-widest text-sky-400 font-black flex items-center gap-2">
-                       <ShieldCheck size={12} className="text-sky-400" /> SOURCE_VERIFICATION
+                  <div className="space-y-3 sm:space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                    <label className="text-[8px] sm:text-[9px] uppercase tracking-widest text-sky-400 font-black flex items-center gap-1.5 sm:gap-2">
+                       <ShieldCheck size={11} className="sm:hidden text-sky-400" />
+                       <ShieldCheck size={12} className="hidden sm:block text-sky-400" /> SOURCE_VERIFICATION
                     </label>
-                    <div className={`p-6 bg-white/5 border rounded-2xl shadow-xl ${selectedNode.details.status === 'VERIFIED_HIT' ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-sky-500/20 bg-sky-500/5'}`}>
-                      <div className="flex justify-between items-start mb-4">
-                        <span className={`text-[8px] uppercase font-black px-2 py-1 rounded ${selectedNode.details.status === 'VERIFIED_HIT' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-sky-500/20 text-sky-400'}`}>
+                    <div className={`p-4 sm:p-5 md:p-6 bg-white/5 border rounded-xl sm:rounded-2xl shadow-xl ${selectedNode.details.status === 'VERIFIED_HIT' ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-sky-500/20 bg-sky-500/5'}`}>
+                      <div className="flex justify-between items-start mb-3 sm:mb-4">
+                        <span className={`text-[7px] sm:text-[8px] uppercase font-black px-1.5 sm:px-2 py-0.5 sm:py-1 rounded ${selectedNode.details.status === 'VERIFIED_HIT' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-sky-500/20 text-sky-400'}`}>
                           {selectedNode.details.status}
                         </span>
-                        {selectedNode.details.source_engine === 'pastebin' && <FileText size={14} className="text-orange-500" />}
-                        {selectedNode.type === 'github' && <Github size={14} className="text-slate-400" />}
+                        {selectedNode.details.source_engine === 'pastebin' && <FileText size={12} className="sm:hidden text-orange-500" />}
+                        {selectedNode.details.source_engine === 'pastebin' && <FileText size={14} className="hidden sm:block text-orange-500" />}
+                        {selectedNode.type === 'github' && <Github size={12} className="sm:hidden text-slate-400" />}
+                        {selectedNode.type === 'github' && <Github size={14} className="hidden sm:block text-slate-400" />}
                       </div>
                       
-                      <div className="bg-[#020408] p-4 rounded-lg border border-white/5 mb-4 font-mono text-[10px] text-slate-400 leading-tight overflow-hidden">
+                      <div className="bg-[#020408] p-3 sm:p-4 rounded-lg border border-white/5 mb-3 sm:mb-4 font-mono text-[9px] sm:text-[10px] text-slate-400 leading-tight overflow-hidden">
                          <div className="mb-2 italic text-slate-200 font-bold border-l-2 border-emerald-500/50 pl-2 py-1 bg-emerald-500/5">
                            {selectedNode.details.match_type === 'github_commit' ? "COMMIT_MSG:" : "EXTRACTED_SNIPPET:"}
                          </div>
@@ -1987,9 +2004,11 @@ const App: React.FC = () => {
                 </div>
                 {/* End scrollable content */}
 
-                    <div className="pt-4 border-t border-white/5 flex gap-3 shrink-0 p-4">
-                      <button onClick={() => deleteNode(selectedNode.id)} className="flex-1 h-10 bg-gradient-to-r from-rose-600/15 to-rose-500/15 border border-rose-400/30 text-rose-300 hover:text-rose-200 hover:border-rose-400/50 rounded-xl flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-wide hover:from-rose-500/20 hover:to-rose-400/20 transition-all">
-                        <Trash2 size={14} /> REMOVE_NODE
+                    <div className="pt-3 sm:pt-4 border-t border-white/5 flex gap-2 sm:gap-3 shrink-0 p-3 sm:p-4">
+                      <button onClick={() => deleteNode(selectedNode.id)} className="flex-1 h-11 sm:h-12 bg-gradient-to-r from-rose-600/15 to-rose-500/15 border border-rose-400/30 text-rose-300 hover:text-rose-200 hover:border-rose-400/50 rounded-xl flex items-center justify-center gap-2 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide hover:from-rose-500/20 hover:to-rose-400/20 transition-all">
+                        <Trash2 size={14} className="sm:hidden" />
+                        <Trash2 size={16} className="hidden sm:block" /> 
+                        <span className="hidden xs:inline">REMOVE_NODE</span><span className="xs:hidden">REMOVE</span>
                       </button>
                     </div>
                   </>

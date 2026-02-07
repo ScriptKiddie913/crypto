@@ -269,7 +269,8 @@ const App: React.FC = () => {
             addLink({ source: nodeId, target: txNode.id, value: 2, label: `${amtString} ${unit}` });
             
             if (currentDepth < maxDepth && !scanAborted) {
-              await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, force, rootScanId);
+              // Only use force for root node, not for children to prevent over-expansion
+              await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, false, rootScanId);
             }
           } catch (e) {
             console.warn(`Error processing transaction ${tx.txid}:`, e);
@@ -302,7 +303,8 @@ const App: React.FC = () => {
                 addNode(inNode);
                 addLink({ source: addr, target: nodeId, value: 1, label: valStr });
                 if (currentDepth < maxDepth && !scanAborted) {
-                  await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, force, rootScanId);
+                  // Only use force for root node, not for children to prevent over-expansion
+                  await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, false, rootScanId);
                 }
               }
             }
@@ -322,7 +324,8 @@ const App: React.FC = () => {
                 addNode(outNode);
                 addLink({ source: nodeId, target: addr, value: 1, label: valStr });
                 if (currentDepth < maxDepth && !scanAborted) {
-                  await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, force, rootScanId);
+                  // Only use force for root node, not for children to prevent over-expansion
+                  await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, false, rootScanId);
                 }
               }
             }
@@ -1132,7 +1135,7 @@ const App: React.FC = () => {
         });
 
         await Promise.all([
-          expandNode(val, root.type, 2, 0, false), // Depth 2: fetch transactions and their immediate connections
+          expandNode(val, root.type, 1, 0, false), // Depth 1: only direct transactions linked to wallet
           handleOSINTSweep(val)
         ]);
       } else if (type === SearchType.TX) {
@@ -1180,7 +1183,7 @@ const App: React.FC = () => {
         }
         
         await Promise.all([
-          expandNode(val, 'transaction', 2, 0, false), // Depth 2: fetch addresses and their transactions
+          expandNode(val, 'transaction', 1, 0, false), // Depth 1: only direct addresses from transaction
           handleOSINTSweep(val)
         ]);
       }

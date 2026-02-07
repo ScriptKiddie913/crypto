@@ -100,41 +100,6 @@
       .scrollbar-hide::-webkit-scrollbar {
         display: none;
       }
-      
-      /* Mobile optimizations */
-      @media (max-width: 768px) {
-        body {
-          overflow-x: hidden;
-        }
-        
-        /* Larger touch targets */
-        button, a, input[type="range"] {
-          min-height: 44px;
-          touch-action: manipulation;
-        }
-        
-        /* Prevent text selection on buttons */
-        button {
-          -webkit-tap-highlight-color: transparent;
-          user-select: none;
-        }
-        
-        /* Smooth scrolling for mobile panels */
-        .overflow-y-auto {
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        /* Mobile slider improvements */
-        .slider::-webkit-slider-thumb {
-          width: 16px;
-          height: 16px;
-        }
-        
-        .slider::-moz-range-thumb {
-          width: 16px;
-          height: 16px;
-        }
-      }
     </style>
   <script type="importmap">
 {

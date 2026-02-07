@@ -1156,29 +1156,39 @@ const App: React.FC = () => {
                   <span className="text-[9px] font-bold text-emerald-400 w-2">{hyperMode ? 8 : scanDepth}</span>
                 </div>
                 
-                <button 
-                  onClick={() => setShowDateFilter(!showDateFilter)}
-                  className={`text-[8px] font-bold px-2 py-2 rounded-lg transition-all ${showDateFilter ? 'bg-emerald-600/20 text-emerald-400' : 'text-slate-400 hover:text-slate-300'}`}
-                >
-                  📅
-                </button>
-                
-                {showDateFilter && (
-                  <div className="flex items-center gap-1">
-                    <input 
-                      type="date" 
-                      value={dateFilter.startDate}
-                      onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
-                      className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-24"
-                    />
-                    <input 
-                      type="date" 
-                      value={dateFilter.endDate}
-                      onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
-                      className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-24"
-                    />
-                  </div>
-                )}
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowDateFilter(!showDateFilter)}
+                    className={`text-[8px] font-bold px-2 py-2 rounded-lg transition-all ${showDateFilter ? 'bg-emerald-600/20 text-emerald-400' : 'text-slate-400 hover:text-slate-300'}`}
+                  >
+                    📅
+                  </button>
+                  
+                  {showDateFilter && (
+                    <div className="absolute top-12 left-0 bg-slate-900/95 border border-slate-600/50 rounded-lg p-2 flex items-center gap-1 z-30 backdrop-blur-sm">
+                      <div className="text-[7px] text-slate-400 font-bold">FROM:</div>
+                      <input 
+                        type="date" 
+                        value={dateFilter.startDate}
+                        onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
+                        className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
+                      />
+                      <div className="text-[7px] text-slate-400 font-bold">TO:</div>
+                      <input 
+                        type="date" 
+                        value={dateFilter.endDate}
+                        onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
+                        className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-20 focus:border-emerald-500 focus:outline-none"
+                      />
+                      <button 
+                        onClick={() => setShowDateFilter(false)}
+                        className="text-[6px] bg-red-500/20 text-red-400 px-1 py-1 rounded hover:bg-red-500/30"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             {/* Performance indicator */}
@@ -1236,7 +1246,7 @@ const App: React.FC = () => {
           )}
 
           {selectedNode && (
-            <div className="absolute top-4 right-4 w-72 bg-[#05070c]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 shadow-xl animate-in fade-in slide-in-from-right-4 z-10 max-h-[90vh] overflow-y-auto scrollbar-hide">
+            <div className="absolute top-4 right-4 w-80 max-w-[calc(100vw-2rem)] bg-[#05070c]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 shadow-xl animate-in fade-in slide-in-from-right-4 z-10 max-h-[calc(100vh-2rem)] overflow-y-auto scrollbar-hide">
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
                 <div className="flex items-center gap-2">
                   <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-400"><Cpu size={14} /></div>
@@ -1244,7 +1254,7 @@ const App: React.FC = () => {
                 </div>
                 <button 
                   onClick={() => setSelectedNode(null)} 
-                  className="text-slate-500 hover:text-white transition-colors hover:bg-white/10 p-1 rounded"
+                  className="text-slate-500 hover:text-white transition-colors hover:bg-white/10 p-1 rounded w-6 h-6 flex items-center justify-center"
                 >
                   <X size={16} />
                 </button>
@@ -1379,25 +1389,150 @@ const App: React.FC = () => {
                   
                   {/* Display balance prominently */}
                   {(selectedNode.details?.balance || selectedNode.details?.current_balance) && (
-                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                      <div className="text-[8px] font-bold text-emerald-400 uppercase mb-1">CURRENT BALANCE</div>
+                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                      <div className="text-[7px] font-bold text-emerald-400 uppercase mb-1">CURRENT BALANCE</div>
                       <div className="text-sm font-bold text-emerald-300">{selectedNode.details.balance || selectedNode.details.current_balance}</div>
                     </div>
                   )}
                   
                   {/* Display transaction count and other key metrics */}
                   {selectedNode.details?.transaction_count && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2">
-                        <div className="text-[7px] text-blue-400 font-bold uppercase">TX COUNT</div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-1.5">
+                        <div className="text-[6px] text-blue-400 font-bold uppercase">TX COUNT</div>
                         <div className="text-xs font-bold text-blue-300">{selectedNode.details.transaction_count}</div>
                       </div>
                       {selectedNode.details.total_received && (
-                        <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-2">
-                          <div className="text-[7px] text-green-400 font-bold uppercase">RECEIVED</div>
+                        <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-1.5">
+                          <div className="text-[6px] text-green-400 font-bold uppercase">RECEIVED</div>
                           <div className="text-xs font-bold text-green-300">{selectedNode.details.total_received}</div>
                         </div>
                       )}
+                    </div>
+                  )}
+                  
+                  {/* Suspicious Transactions Section */}
+                  {selectedNode.details?.transactions && selectedNode.details.transactions.filter((tx: any) => 
+                    tx.suspicious || (tx.amount && parseFloat(tx.amount.toString()) > 50000) || (tx.gas_fee && parseFloat(tx.gas_fee.toString()) > 1000) || 
+                    (tx.value && parseFloat(tx.value.toString()) > 0.1)
+                  ).length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[7px] uppercase tracking-wide text-red-400 font-bold flex items-center gap-1">
+                        <span>🚨</span> FLAGGED TRANSACTIONS
+                      </div>
+                      <div className="space-y-1 max-h-24 overflow-y-auto">
+                        {selectedNode.details.transactions.filter((tx: any) => 
+                          tx.suspicious || (tx.amount && parseFloat(tx.amount.toString()) > 50000) || (tx.gas_fee && parseFloat(tx.gas_fee.toString()) > 1000)
+                        ).slice(0, 3).map((tx: any, idx: number) => (
+                          <div key={idx} className="bg-red-500/10 border border-red-500/30 rounded p-1.5">
+                            <div className="text-[6px] text-red-300 font-bold">#{tx.hash?.substring(0, 8) || tx.txid?.substring(0, 8) || 'N/A'}...</div>
+                            <div className="text-[6px] text-slate-300">Amount: {tx.amount || tx.value || 'N/A'}</div>
+                            <div className="text-[6px] text-slate-400">Fee: {tx.gas_fee || tx.fee || 'N/A'}</div>
+                            {tx.timestamp && (
+                              <div className="text-[5px] text-slate-500">{new Date((tx.timestamp * 1000) || tx.timestamp).toLocaleDateString()}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* All Wallets & Transactions Section */}
+                  {selectedNode.details?.transactions && (
+                    <div className="space-y-2">
+                      <div className="text-[7px] uppercase tracking-wide text-blue-400 font-bold flex items-center gap-1">
+                        📊 ALL TRANSACTIONS ({selectedNode.details.transactions.length})
+                      </div>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {selectedNode.details.transactions.slice(0, 8).map((tx: any, idx: number) => (
+                          <div key={idx} className="bg-slate-800/40 border border-slate-600/30 rounded p-1.5">
+                            <div className="grid grid-cols-2 gap-1 text-[6px]">
+                              <div>
+                                <div className="text-blue-300 font-bold">SENDER:</div>
+                                <div className="text-slate-300 truncate font-mono">{(tx.from || tx.inputs?.[0]?.prev_out?.addr)?.substring(0, 10) || 'N/A'}...</div>
+                              </div>
+                              <div>
+                                <div className="text-green-300 font-bold">RECEIVER:</div>
+                                <div className="text-slate-300 truncate font-mono">{(tx.to || tx.out?.[0]?.addr)?.substring(0, 10) || 'N/A'}...</div>
+                              </div>
+                              <div>
+                                <div className="text-yellow-300 font-bold">AMOUNT:</div>
+                                <div className="text-slate-300 font-mono">{tx.amount || tx.value || tx.out?.[0]?.value || 'N/A'}</div>
+                              </div>
+                              <div>
+                                <div className="text-purple-300 font-bold">GAS/FEE:</div>
+                                <div className="text-slate-300 font-mono">{tx.gas_fee || tx.fee || 'N/A'}</div>
+                              </div>
+                            </div>
+                            {(tx.timestamp || tx.time) && (
+                              <div className="text-[5px] text-slate-400 mt-1 font-mono">
+                                {new Date(((tx.timestamp || tx.time) * 1000) || (tx.timestamp || tx.time)).toLocaleString()}
+                              </div>
+                            )}
+                            {tx.block_height && (
+                              <div className="text-[5px] text-slate-500 font-mono">Block: {tx.block_height}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Suspicious Transactions Section */}
+                  {selectedNode.details?.transactions && (
+                    <div className="space-y-2">
+                      <div className="text-[7px] uppercase tracking-wide text-red-400 font-bold flex items-center gap-1">
+                        <span>🚨</span> SUSPICIOUS TRANSACTIONS
+                      </div>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {selectedNode.details.transactions.filter((tx: any) => 
+                          tx.suspicious || tx.amount > 50000 || tx.gas_fee > 1000
+                        ).slice(0, 5).map((tx: any, idx: number) => (
+                          <div key={idx} className="bg-red-500/10 border border-red-500/30 rounded p-1.5">
+                            <div className="text-[6px] text-red-300 font-bold">#{tx.hash?.substring(0, 8) || 'N/A'}...</div>
+                            <div className="text-[6px] text-slate-300">Amount: {tx.amount || 'N/A'}</div>
+                            <div className="text-[6px] text-slate-400">Gas: {tx.gas_fee || tx.fee || 'N/A'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* All Transactions Section */}
+                  {selectedNode.details?.transactions && (
+                    <div className="space-y-2">
+                      <div className="text-[7px] uppercase tracking-wide text-blue-400 font-bold flex items-center gap-1">
+                        📊 ALL TRANSACTIONS ({selectedNode.details.transactions.length})
+                      </div>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {selectedNode.details.transactions.slice(0, 10).map((tx: any, idx: number) => (
+                          <div key={idx} className="bg-slate-800/40 border border-slate-600/30 rounded p-1.5">
+                            <div className="grid grid-cols-2 gap-1 text-[6px]">
+                              <div>
+                                <div className="text-blue-300 font-bold">FROM:</div>
+                                <div className="text-slate-300 truncate">{tx.from?.substring(0, 12) || 'N/A'}...</div>
+                              </div>
+                              <div>
+                                <div className="text-green-300 font-bold">TO:</div>
+                                <div className="text-slate-300 truncate">{tx.to?.substring(0, 12) || 'N/A'}...</div>
+                              </div>
+                              <div>
+                                <div className="text-yellow-300 font-bold">AMOUNT:</div>
+                                <div className="text-slate-300">{tx.amount || tx.value || 'N/A'}</div>
+                              </div>
+                              <div>
+                                <div className="text-purple-300 font-bold">GAS:</div>
+                                <div className="text-slate-300">{tx.gas_fee || tx.fee || 'N/A'}</div>
+                              </div>
+                            </div>
+                            {tx.timestamp && (
+                              <div className="text-[5px] text-slate-400 mt-1">
+                                {new Date(tx.timestamp * 1000).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                   

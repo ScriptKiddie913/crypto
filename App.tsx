@@ -271,11 +271,11 @@ const App: React.FC = () => {
             addLink({ source: nodeId, target: txNode.id, value: 2, label: `${amtString} ${unit}` });
             
             // For root node deep scan, expand transaction to get connected addresses (depth 1 only)
-            // For normal nodes, respect depth limits
+            // For normal nodes, respect depth limits and always expand when within depth
             if (isRootNode && force && currentDepth === 0) {
               // Root deep scan: expand transactions to show connected addresses
               await expandNode(txNode.id, 'transaction', 1, 0, false, rootScanId, false);
-            } else if (currentDepth < maxDepth && !scanAborted) {
+            } else if (currentDepth + 1 <= maxDepth && !scanAborted) {
               // Normal expansion for non-root nodes
               await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, false, rootScanId, false);
             }
@@ -312,8 +312,8 @@ const App: React.FC = () => {
                 addNode(inNode);
                 addLink({ source: addr, target: nodeId, value: 1, label: valStr });
                 // For root node deep scan, don't expand sender addresses further
-                // For normal nodes, respect depth limits
-                if (!isRootNode && currentDepth < maxDepth && !scanAborted) {
+                // For normal nodes, respect depth limits and always expand when within depth
+                if (!isRootNode && currentDepth + 1 <= maxDepth && !scanAborted) {
                   await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, false, rootScanId, false);
                 }
               }
@@ -368,7 +368,7 @@ const App: React.FC = () => {
     setError(null);
     
     try {
-      const depth = hyperMode ? 8 : Math.max(scanDepth, 2); // Minimum depth 2 for meaningful deep scan
+      const depth = hyperMode ? 8 : Math.max(scanDepth, 3); // Minimum depth 3 for meaningful deep scan
       const isRoot = selectedNode.isRoot || false;
       console.log(`Starting DEEP scan on ${selectedNode.type} (${selectedNode.id.substring(0, 12)}...) with depth: ${depth}, isRoot: ${isRoot}`);
       await expandNode(selectedNode.id, selectedNode.type, depth, 0, true, selectedNode.id, isRoot);
@@ -722,20 +722,22 @@ const App: React.FC = () => {
     doc.rect(0, 0, 210, 60, 'F');
     
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(28);
+    doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
-    doc.text('SOTANIK_AI FORENSIC INTELLIGENCE DOSSIER', 15, 25);
+    const titleLines = doc.splitTextToSize('SOTANIK_AI FORENSIC INTELLIGENCE DOSSIER', 180);
+    doc.text(titleLines, 15, 20);
     
-    doc.setFontSize(12);
+    doc.setFontSize(10);
     doc.setTextColor(16, 185, 129);
-    doc.text('ADVANCED CROSS-CHAIN BLOCKCHAIN FORENSICS & COMPREHENSIVE OSINT ANALYSIS', 15, 35);
+    const subtitleLines = doc.splitTextToSize('ADVANCED CROSS-CHAIN BLOCKCHAIN FORENSICS & COMPREHENSIVE OSINT ANALYSIS', 180);
+    doc.text(subtitleLines, 15, 32);
     
     doc.setTextColor(148, 163, 184);
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.text(`CLASSIFICATION: RESTRICTED | UID: ${Math.random().toString(36).substring(2, 10).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`, 15, 45);
-    doc.text(`GENERATED: ${new Date().toUTCString()}`, 15, 52);
-    doc.text(`ANALYST: SOTANIK_AI_SYSTEM | STATUS: VERIFIED`, 120, 45);
-    doc.text(`TARGET_COUNT: ${nodes.length} | LINKS: ${links.length}`, 120, 52);
+    doc.text(`GENERATED: ${new Date().toUTCString()}`, 15, 50);
+    doc.text(`ANALYST: SOTANIK_AI_SYSTEM | STATUS: VERIFIED`, 15, 55);
+    doc.text(`TARGET_COUNT: ${nodes.length} | LINKS: ${links.length}`, 130, 55);
 
     let y = 75;
     
@@ -765,21 +767,30 @@ const App: React.FC = () => {
 
     if (rootNode) {
       doc.setFillColor(245, 247, 250);
-      doc.rect(15, y - 5, 180, 35, 'F');
+      doc.rect(15, y - 5, 180, 45, 'F');
       
-      doc.setFontSize(12);
+      doc.setFontSize(10);
       doc.setFont('courier', 'bold');
       doc.setTextColor(16, 185, 129);
-      doc.text(`TARGET_ID: ${rootNode.id}`, 20, y + 5);
+      const targetIdLines = doc.splitTextToSize(`TARGET_ID: ${rootNode.id}`, 170);
+      doc.text(targetIdLines[0], 20, y + 5);
       
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(5, 7, 12);
-      doc.text(`NETWORK: ${rootNode.type.toUpperCase().replace('_', ' ')}`, 20, y + 12);
+      doc.setFontSize(9);
+      const network = rootNode.type === 'eth_address' ? 'ETHEREUM' : 
+                      rootNode.type === 'address' ? 'BITCOIN' : 
+                      rootNode.type.toUpperCase().replace('_', ' ');
+      doc.text(`NETWORK: ${network}`, 20, y + 12);
       doc.text(`BALANCE: ${rootNode.details?.balance || rootNode.details?.current_balance || '0.00'}`, 20, y + 19);
       doc.text(`TX_COUNT: ${rootNode.details?.transaction_count || 0}`, 105, y + 12);
       doc.text(`RISK_SCORE: ${rootNode.riskScore || rootNode.details?.threat_risk || 0}/100`, 105, y + 19);
       doc.text(`CLASSIFICATION: ${rootNode.details?.clustering_label || 'IDENTIFIED'}`, 20, y + 26);
-      y += 45;
+      if (rootNode.details?.address_age_days) {
+        doc.setFontSize(8);
+        doc.text(`AGE: ${rootNode.details.address_age_days} days | ACTIVITY: ${rootNode.details.activity_days || 0} days`, 20, y + 33);
+      }
+      y += 50;
     }
 
     // Enhanced Risk Assessment Section
@@ -832,34 +843,47 @@ const App: React.FC = () => {
 
     // Detailed Risk Analysis with Currency Info
     riskNodes.forEach((node, index) => {
-      if (y > 250) { doc.addPage(); y = 20; }
+      if (y > 240) { doc.addPage(); y = 20; }
       const risk = node.riskScore ?? node.details?.threat_risk ?? 0;
-      const currency = node.details?.balance?.includes('BTC') ? 'BTC' : 
+      const currency = node.type === 'eth_address' ? 'ETH' : 
+                       node.type === 'address' ? 'BTC' : 
+                       node.details?.balance?.includes('BTC') ? 'BTC' : 
                        node.details?.balance?.includes('ETH') ? 'ETH' : 'UNKNOWN';
+      const network = node.type === 'eth_address' ? 'Ethereum' : 
+                      node.type === 'address' ? 'Bitcoin' : 
+                      node.details?.network_type || 'UNKNOWN';
       
       doc.setFillColor(250, 250, 250);
-      doc.rect(15, y - 5, 180, 38, 'F');
+      doc.rect(15, y - 5, 180, 45, 'F');
       
-      doc.setFontSize(11);
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(5, 7, 12);
-      doc.text(`${index + 1}. ${node.id.substring(0, 35)}...`, 20, y + 5);
+      const addressLine = doc.splitTextToSize(`${index + 1}. ${node.id}`, 160);
+      doc.text(addressLine[0], 20, y + 5);
       
       doc.setTextColor(risk > 70 ? 239 : risk > 30 ? 255 : 16, risk > 70 ? 68 : risk > 30 ? 193 : 185, risk > 70 ? 68 : risk > 30 ? 7 : 129);
       doc.text(`RISK: ${risk}/100`, 150, y + 5);
       
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setTextColor(75, 85, 99);
-      doc.text(`TYPE: ${node.details?.entity_type || 'UNKNOWN'} | LABEL: ${node.details?.clustering_label || 'IDENTIFIED'}`, 20, y + 12);
-      doc.text(`CURRENCY: ${currency} | NETWORK: ${node.details?.network_type || 'UNKNOWN'}`, 20, y + 19);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`TYPE: ${node.details?.entity_type || node.type || 'UNKNOWN'} | LABEL: ${node.details?.clustering_label || 'IDENTIFIED'}`, 20, y + 12);
+      doc.text(`CURRENCY: ${currency} | NETWORK: ${network}`, 20, y + 18);
       if (node.details?.total_received) {
-        doc.text(`RECEIVED: ${node.details.total_received} | SENT: ${node.details.total_sent || '0'}`, 20, y + 26);
+        doc.text(`RECEIVED: ${node.details.total_received} | SENT: ${node.details.total_sent || '0'}`, 20, y + 24);
       }
       if (node.details?.balance || node.details?.current_balance) {
         doc.setTextColor(16, 185, 129);
-        doc.text(`BALANCE: ${node.details.balance || node.details.current_balance}`, 20, y + 33);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`BALANCE: ${node.details.balance || node.details.current_balance}`, 20, y + 30);
       }
-      y += 43;
+      if (node.details?.transaction_count) {
+        doc.setTextColor(75, 85, 99);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`TX COUNT: ${node.details.transaction_count}`, 20, y + 36);
+      }
+      y += 50;
     });
 
     // Enhanced OSINT Intelligence Section
@@ -883,7 +907,7 @@ const App: React.FC = () => {
     y += 15;
 
     osintNodes.forEach((node, index) => {
-      if (y > 240) { doc.addPage(); y = 20; }
+      if (y > 220) { doc.addPage(); y = 20; }
       
       // Color-coded background based on source
       if (node.type === 'github') {
@@ -893,28 +917,29 @@ const App: React.FC = () => {
       } else {
         doc.setFillColor(250, 245, 245);
       }
-      doc.rect(15, y - 5, 180, 55, 'F');
+      doc.rect(15, y - 5, 180, 60, 'F');
       
-      doc.setFontSize(11);
+      doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(5, 7, 12);
-      doc.text(`${index + 1}. ${node.label}`, 20, y + 5);
+      const labelLines = doc.splitTextToSize(`${index + 1}. ${node.label}`, 170);
+      doc.text(labelLines[0], 20, y + 5);
       
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setTextColor(59, 130, 246);
       doc.setFont('courier', 'normal');
-      const urlText = doc.splitTextToSize(`URL: ${node.id}`, 165);
-      doc.text(urlText, 20, y + 12);
-      y += (urlText.length * 4);
+      const urlText = doc.splitTextToSize(`URL: ${node.id}`, 170);
+      doc.text(urlText.slice(0, 2), 20, y + 12);
+      y += (Math.min(urlText.length, 2) * 4) + 5;
       doc.setFont('helvetica', 'normal');
       
       doc.setTextColor(5, 7, 12);
-      const proofText = doc.splitTextToSize(`INTELLIGENCE: ${node.details?.context || 'Identifier verified in source.'}`, 165);
-      doc.text(proofText, 20, y + 5);
-      y += (proofText.length * 4);
+      const proofText = doc.splitTextToSize(`INTELLIGENCE: ${node.details?.context || 'Identifier verified in source.'}`, 170);
+      doc.text(proofText.slice(0, 3), 20, y + 5);
+      y += (Math.min(proofText.length, 3) * 4) + 5;
       
       if (node.details?.social_intelligence) {
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setTextColor(16, 185, 129);
         doc.text(`THREAT_LEVEL: ${node.details.social_intelligence.threat_level} | PLATFORM: ${node.details.social_intelligence.source_platform.toUpperCase()}`, 20, y + 5);
         y += 6;
@@ -922,8 +947,9 @@ const App: React.FC = () => {
       
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(16, 185, 129);
-      doc.text(`ATTRIBUTION: ${node.details?.parent_wallet || rootNode?.id}`, 20, y + 5);
-      y += 20;
+      const attrText = doc.splitTextToSize(`ATTRIBUTION: ${node.details?.parent_wallet || rootNode?.id || 'UNKNOWN'}`, 170);
+      doc.text(attrText[0], 20, y + 5);
+      y += 22;
     });
 
     // Transaction Flow Analysis (enhanced with detailed risks)
@@ -966,66 +992,172 @@ const App: React.FC = () => {
     y += 10;
 
     transactionNodes.forEach((tx, index) => {
-      if (y > 230) { doc.addPage(); y = 20; }
+      if (y > 210) { doc.addPage(); y = 20; }
       
       const amount = tx.details?.amount || tx.details?.total_value_out || '0';
-      const currency = amount.includes('BTC') ? 'BTC' : amount.includes('ETH') ? 'ETH' : 'UNKNOWN';
-      const sender = tx.details?.sender || tx.details?.from || 'UNKNOWN';
-      const receiver = tx.details?.receiver || tx.details?.to || 'UNKNOWN';
-      const fee = tx.details?.fee_analysis || tx.details?.gas_fee || 'N/A';
-      const timestamp = tx.details?.timestamp_analysis || 'N/A';
+      const currency = tx.type === 'transaction' ? (amount.includes('BTC') ? 'BTC' : amount.includes('ETH') ? 'ETH' : 'BTC') : 'UNKNOWN';
+      
+      // Extract sender/receiver from links or details
+      const txLinks = links.filter(l => l.source === tx.id || l.target === tx.id);
+      const senderLink = txLinks.find(l => l.target === tx.id);
+      const receiverLink = txLinks.find(l => l.source === tx.id);
+      const sender = tx.details?.sender || tx.details?.from || (typeof senderLink?.source === 'string' ? senderLink.source : 'UNKNOWN');
+      const receiver = tx.details?.receiver || tx.details?.to || (typeof receiverLink?.target === 'string' ? receiverLink.target : 'UNKNOWN');
+      
+      const fee = tx.details?.fee || tx.details?.fee_analysis || tx.details?.gas_fee || 'N/A';
+      const timestamp = tx.details?.timestamp || tx.details?.timestamp_analysis || tx.details?.time_ago || 'N/A';
       const riskIndicators = tx.details?.risk_indicators || [];
       const privacyScore = tx.details?.privacy_score || 'N/A';
+      const txType = tx.details?.tx_type || 'GENERAL';
+      const complexityScore = tx.details?.complexity_score || 0;
       
       // Transaction header box
       doc.setFillColor(245, 247, 250);
       doc.rect(15, y - 5, 180, 8, 'F');
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(5, 7, 12);
-      doc.text(`TX ${index + 1}: ${tx.id.substring(0, 20)}...`, 20, y);
+      const txIdLines = doc.splitTextToSize(`TX ${index + 1}: ${tx.id}`, 160);
+      doc.text(txIdLines[0], 20, y);
       y += 10;
       
       // Currency and core data
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(16, 185, 129);
       doc.text(`CURRENCY: ${currency}`, 20, y);
-      doc.text(`AMOUNT: ${amount}`, 80, y);
+      doc.text(`AMOUNT: ${amount}`, 65, y);
+      doc.text(`TYPE: ${txType}`, 130, y);
       y += 6;
       
-      // Wallet addresses
+      // Wallet addresses with full length
       doc.setTextColor(75, 85, 99);
-      doc.text(`SENDER: ${sender.substring(0, 40)}${sender.length > 40 ? '...' : ''}`, 20, y);
+      const senderLines = doc.splitTextToSize(`SENDER: ${sender}`, 170);
+      doc.text(senderLines[0], 20, y);
       y += 5;
-      doc.text(`RECEIVER: ${receiver.substring(0, 40)}${receiver.length > 40 ? '...' : ''}`, 20, y);
+      const receiverLines = doc.splitTextToSize(`RECEIVER: ${receiver}`, 170);
+      doc.text(receiverLines[0], 20, y);
       y += 6;
       
       // Transaction details
-      doc.setFontSize(8);
-      doc.text(`FEE: ${fee} | PRIVACY SCORE: ${privacyScore}/100`, 20, y);
+      doc.setFontSize(7);
+      doc.text(`FEE: ${fee}`, 20, y);
+      doc.text(`PRIVACY: ${privacyScore}/100`, 80, y);
+      doc.text(`COMPLEXITY: ${complexityScore}/100`, 130, y);
       y += 5;
-      doc.text(`TIMESTAMP: ${timestamp.substring(0, 50)}`, 20, y);
+      const timeLines = doc.splitTextToSize(`TIME: ${timestamp}`, 170);
+      doc.text(timeLines[0], 20, y);
       y += 6;
+      
+      // Additional details
+      if (tx.details?.total_inputs || tx.details?.total_outputs) {
+        doc.text(`INPUTS: ${tx.details.total_inputs || 0} | OUTPUTS: ${tx.details.total_outputs || 0}`, 20, y);
+        y += 5;
+      }
+      if (tx.details?.block) {
+        doc.text(`BLOCK: ${tx.details.block} | STATUS: ${tx.details.status || 'CONFIRMED'}`, 20, y);
+        y += 5;
+      }
       
       // Risk indicators section
       if (riskIndicators.length > 0) {
         doc.setFillColor(254, 226, 226);
-        doc.rect(20, y - 2, 170, 6 + (riskIndicators.length * 4), 'F');
+        doc.rect(20, y, 170, 5 + (riskIndicators.length * 4), 'F');
         doc.setTextColor(220, 38, 38);
         doc.setFont('helvetica', 'bold');
-        doc.text('RISK INDICATORS:', 25, y + 2);
+        doc.setFontSize(7);
+        doc.text('RISK INDICATORS:', 25, y + 3);
         y += 6;
         doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
         riskIndicators.forEach((risk: string) => {
-          doc.text(`• ${risk.replace('_', ' ')}`, 30, y);
+          doc.text(`• ${risk.replace(/_/g, ' ')}`, 28, y);
           y += 4;
         });
-        y += 3;
+        y += 2;
       } else {
         doc.setTextColor(16, 185, 129);
+        doc.setFontSize(7);
         doc.text('STATUS: NO RISK INDICATORS DETECTED', 20, y);
-        y += 6;
+        y += 5;
+      }
+      
+      y += 10;
+    });
+
+    // Comprehensive Wallet Address Section
+    if (y > 180) { doc.addPage(); y = 20; }
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 7, 12);
+    doc.text('5. COMPREHENSIVE WALLET ADDRESS CATALOG', 15, y);
+    doc.line(15, y + 2, 195, y + 2);
+    y += 15;
+
+    const walletNodes = nodes.filter(n => n.type === 'address' || n.type === 'eth_address');
+    doc.setFontSize(11);
+    doc.text(`TOTAL WALLET ADDRESSES: ${walletNodes.length}`, 15, y);
+    y += 12;
+
+    walletNodes.forEach((wallet, index) => {
+      if (y > 200) { doc.addPage(); y = 20; }
+      
+      const currency = wallet.type === 'eth_address' ? 'ETH' : 'BTC';
+      const network = wallet.type === 'eth_address' ? 'Ethereum' : 'Bitcoin';
+      const balance = wallet.details?.balance || wallet.details?.current_balance || '0.00';
+      const txCount = wallet.details?.transaction_count || 0;
+      const risk = wallet.riskScore ?? wallet.details?.threat_risk ?? 0;
+      
+      doc.setFillColor(248, 250, 252);
+      doc.rect(15, y - 5, 180, 55, 'F');
+      
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(5, 7, 12);
+      doc.text(`WALLET ${index + 1}:`, 20, y);
+      y += 5;
+      
+      doc.setFontSize(7);
+      doc.setFont('courier', 'normal');
+      doc.setTextColor(59, 130, 246);
+      const walletIdLines = doc.splitTextToSize(wallet.id, 170);
+      doc.text(walletIdLines.slice(0, 2), 20, y);
+      y += (Math.min(walletIdLines.length, 2) * 4) + 3;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(75, 85, 99);
+      doc.text(`NETWORK: ${network} | CURRENCY: ${currency}`, 20, y);
+      y += 5;
+      
+      doc.setFontSize(8);
+      doc.setTextColor(16, 185, 129);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`BALANCE: ${balance}`, 20, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(75, 85, 99);
+      doc.text(`TX COUNT: ${txCount}`, 80, y);
+      doc.setTextColor(risk > 70 ? 220 : risk > 30 ? 200 : 75, risk > 70 ? 38 : risk > 30 ? 150 : 85, risk > 70 ? 38 : risk > 30 ? 0 : 99);
+      doc.text(`RISK: ${risk}/100`, 130, y);
+      y += 6;
+      
+      if (wallet.details?.total_received || wallet.details?.total_sent) {
+        doc.setFontSize(7);
+        doc.setTextColor(75, 85, 99);
+        doc.text(`RECEIVED: ${wallet.details.total_received || 'N/A'}`, 20, y);
+        doc.text(`SENT: ${wallet.details.total_sent || 'N/A'}`, 100, y);
+        y += 5;
+      }
+      
+      if (wallet.details?.first_activity || wallet.details?.last_activity) {
+        doc.text(`FIRST: ${wallet.details.first_activity || 'N/A'}`, 20, y);
+        doc.text(`LAST: ${wallet.details.last_activity || 'N/A'}`, 100, y);
+        y += 5;
+      }
+      
+      if (wallet.details?.clustering_label) {
+        doc.setTextColor(16, 185, 129);
+        doc.text(`LABEL: ${wallet.details.clustering_label}`, 20, y);
+        y += 5;
       }
       
       y += 8;
@@ -1036,7 +1168,7 @@ const App: React.FC = () => {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('5. TECHNICAL APPENDIX', 15, y);
+    doc.text('6. TECHNICAL APPENDIX', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 

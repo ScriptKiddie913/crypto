@@ -253,15 +253,45 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
       </div>
 
       {hoveredNode && (
-        <div className="fixed pointer-events-none z-50 bg-[#05070c]/98 backdrop-blur-3xl border border-white/10 rounded-2xl p-6 shadow-2xl min-w-[300px] animate-in fade-in zoom-in-95 duration-150" style={{ left: tooltipPos.x + 24, top: tooltipPos.y + 24 }}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-4 h-4 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.4)]" style={{ backgroundColor: getNodeColor(hoveredNode) }} />
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">{hoveredNode.type.replace('_', ' ')}</span>
+        <div className="fixed pointer-events-none z-50 bg-[#05070c]/98 backdrop-blur-3xl border border-white/10 rounded-xl p-4 shadow-2xl max-w-[320px] animate-in fade-in zoom-in-95 duration-150" style={{ left: Math.min(tooltipPos.x + 16, window.innerWidth - 340), top: Math.min(tooltipPos.y + 16, window.innerHeight - 200) }}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-3 h-3 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.3)]" style={{ backgroundColor: getNodeColor(hoveredNode) }} />
+            <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{hoveredNode.type.replace('_', ' ')}</span>
           </div>
-          <p className="text-[14px] mono text-white font-bold break-all leading-relaxed mb-4">{hoveredNode.id}</p>
+          <p className="text-[11px] mono text-white font-bold break-all leading-relaxed mb-2">{hoveredNode.id}</p>
+          
+          {/* Show balance for wallet nodes */}
+          {(hoveredNode.details?.balance || hoveredNode.details?.current_balance) && (
+            <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-2">
+              <div className="text-[7px] text-emerald-400 font-bold uppercase">BALANCE</div>
+              <div className="text-[12px] font-bold text-emerald-300">{hoveredNode.details.balance || hoveredNode.details.current_balance}</div>
+            </div>
+          )}
+          
+          {/* Show amount for transaction nodes */}
+          {hoveredNode.details?.amount && (
+            <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg mb-2">
+              <div className="text-[7px] text-blue-400 font-bold uppercase">AMOUNT</div>
+              <div className="text-[12px] font-bold text-blue-300">{hoveredNode.details.amount}</div>
+            </div>
+          )}
+          
+          {/* Show flow value */}
+          {hoveredNode.details?.flow && (
+            <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-2">
+              <div className="text-[7px] text-yellow-400 font-bold uppercase">{hoveredNode.details.role || 'FLOW'}</div>
+              <div className="text-[12px] font-bold text-yellow-300">{hoveredNode.details.flow}</div>
+            </div>
+          )}
+          
+          {/* Show tx count */}
+          {hoveredNode.details?.transaction_count && (
+            <div className="text-[8px] text-slate-400">TX Count: <span className="text-white font-bold">{hoveredNode.details.transaction_count}</span></div>
+          )}
+          
           {hoveredNode.details?.context && (
-            <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl border-l-4 border-emerald-400/50">
-               <p className="text-[12px] text-emerald-400 leading-relaxed font-semibold italic">"{hoveredNode.details.context}"</p>
+            <div className="p-2 bg-emerald-500/5 border border-emerald-500/10 rounded-lg mt-2">
+              <p className="text-[9px] text-emerald-400 leading-relaxed italic truncate">"{hoveredNode.details.context}"</p>
             </div>
           )}
         </div>

@@ -155,7 +155,7 @@ const App: React.FC = () => {
     }
   };
 
-  const expandNode = useCallback(async (nodeId: string, type: string, maxDepth = 2, currentDepth = 0, force = false, rootScanId?: string) => {
+  const expandNode = useCallback(async (nodeId: string, type: string, maxDepth = 1, currentDepth = 0, force = false, rootScanId?: string) => {
     if (currentDepth >= maxDepth || scanAborted) return;
     
     const expansionKey = `${nodeId}-depth-${currentDepth}-max-${maxDepth}`;
@@ -192,7 +192,7 @@ const App: React.FC = () => {
           detailedAddressInfo = null;
         }
         
-        const limit = force ? 150 : currentDepth === 0 ? 100 : 50;
+        const limit = force ? 150 : currentDepth === 0 ? 50 : 20;
         let targetTxs = (txs || []).slice(0, limit);
         
         console.log(`Processing ${targetTxs.length} transactions for address ${nodeId.substring(0, 12)}...`);
@@ -957,9 +957,19 @@ const App: React.FC = () => {
 
   const startInvestigation = async () => {
     const val = query.trim();
-    if (!val || loading) return;
+    if (!val) return;
+    
+    // Toggle: if already loading, stop the scan
+    if (loading) {
+      setScanAborted(true);
+      setLoading(false);
+      setScanningNodeId(null);
+      return;
+    }
+    
     setLoading(true);
     resetGraph();
+    setScanAborted(false);
     setError(null);
 
     try {
@@ -1024,7 +1034,7 @@ const App: React.FC = () => {
         });
 
         await Promise.all([
-          expandNode(val, root.type, 3, 0, false), // Increased initial depth for more comprehensive scanning
+          expandNode(val, root.type, 1, 0, false), // Depth 1: only direct links to main query
           handleOSINTSweep(val)
         ]);
       } else if (type === SearchType.TX) {
@@ -1072,7 +1082,7 @@ const App: React.FC = () => {
         }
         
         await Promise.all([
-          expandNode(val, 'transaction', 3, 0, false), // Increased depth for transaction analysis
+          expandNode(val, 'transaction', 1, 0, false), // Depth 1: only direct links
           handleOSINTSweep(val)
         ]);
       }
@@ -1114,9 +1124,9 @@ const App: React.FC = () => {
               />
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={startInvestigation} disabled={loading} className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-40 text-black px-8 h-12 rounded-2xl text-[10px] font-bold uppercase tracking-wide transition-all flex items-center gap-2">
+              <button onClick={startInvestigation} className={`${loading ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400' : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400'} text-black px-8 h-12 rounded-2xl text-[10px] font-bold uppercase tracking-wide transition-all flex items-center gap-2`}>
                 {loading ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />}
-                {loading ? "SCANNING..." : "SCAN"}
+                {loading ? "STOP" : "SCAN"}
               </button>
               {nodes.length > 0 && (
                 <button onClick={generateReport} className="bg-slate-700/60 border border-slate-500/40 text-slate-200 hover:text-white hover:border-emerald-400/50 px-6 h-12 rounded-2xl text-[9px] font-bold uppercase tracking-wide transition-all flex items-center gap-2">
@@ -1246,19 +1256,26 @@ const App: React.FC = () => {
           )}
 
           {selectedNode && (
-            <div className="absolute top-4 right-4 w-80 max-w-[calc(100vw-2rem)] bg-[#05070c]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 shadow-xl animate-in fade-in slide-in-from-right-4 z-10 max-h-[calc(100vh-2rem)] overflow-y-auto scrollbar-hide">
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
-                <div className="flex items-center gap-2">
-                  <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-400"><Cpu size={14} /></div>
-                  <h2 className="font-bold text-[10px] tracking-wide uppercase text-white">NODE_DATA</h2>
+            <div className="fixed inset-0 z-50 flex items-center justify-end pointer-events-none">
+              {/* Backdrop */}
+              <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setSelectedNode(null)} />
+              {/* Panel */}
+              <div className="relative w-[360px] max-w-[95vw] h-[calc(100vh-2rem)] m-4 bg-[#05070c]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl pointer-events-auto flex flex-col z-10 animate-in fade-in slide-in-from-right-4">
+                {/* Fixed header */}
+                <div className="flex items-center justify-between p-4 border-b border-white/5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-400"><Cpu size={14} /></div>
+                    <h2 className="font-bold text-[10px] tracking-wide uppercase text-white">NODE_DATA</h2>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedNode(null)} 
+                    className="w-7 h-7 bg-red-500/20 hover:bg-red-500/40 border border-red-500/40 rounded-lg flex items-center justify-center text-red-400 hover:text-red-200 transition-all"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
-                <button 
-                  onClick={() => setSelectedNode(null)} 
-                  className="text-slate-500 hover:text-white transition-colors hover:bg-white/10 p-1 rounded w-6 h-6 flex items-center justify-center"
-                >
-                  <X size={16} />
-                </button>
-              </div>
+                {/* Scrollable content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
               <div className="space-y-4">
                 <div className="p-3 bg-[#0a0d14] border border-white/10 rounded-xl break-all mono text-[10px] text-emerald-400 font-bold leading-relaxed shadow-inner">
@@ -1631,10 +1648,12 @@ const App: React.FC = () => {
                     })}
                   </div>
                 </div>
+                </div>
+                {/* End scrollable content */}
 
-                <div className="pt-8 border-t border-white/5 flex gap-3">
-                   <button onClick={() => deleteNode(selectedNode.id)} className="flex-1 h-16 bg-gradient-to-r from-rose-600/15 to-rose-500/15 border-2 border-rose-400/30 text-rose-300 hover:text-rose-200 hover:border-rose-400/50 rounded-3xl flex items-center justify-center gap-3 text-[11px] font-black uppercase tracking-[0.1em] hover:from-rose-500/20 hover:to-rose-400/20 transition-all duration-300 shadow-lg backdrop-blur-sm">
-                     <Trash2 size={18} /> REMOVE_NODE
+                <div className="pt-4 border-t border-white/5 flex gap-3 shrink-0 p-4">
+                   <button onClick={() => deleteNode(selectedNode.id)} className="flex-1 h-10 bg-gradient-to-r from-rose-600/15 to-rose-500/15 border border-rose-400/30 text-rose-300 hover:text-rose-200 hover:border-rose-400/50 rounded-xl flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-wide hover:from-rose-500/20 hover:to-rose-400/20 transition-all">
+                     <Trash2 size={14} /> REMOVE_NODE
                    </button>
                 </div>
               </div>

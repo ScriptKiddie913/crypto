@@ -1275,9 +1275,8 @@ const App: React.FC = () => {
                   </button>
                 </div>
                 {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-
-              <div className="space-y-4">
+                <div className="flex-1 overflow-y-auto p-4">
+                  <div className="space-y-4">
                 <div className="p-3 bg-[#0a0d14] border border-white/10 rounded-xl break-all mono text-[10px] text-emerald-400 font-bold leading-relaxed shadow-inner">
                   {selectedNode.id}
                 </div>

@@ -74,9 +74,11 @@ const App: React.FC = () => {
       // Validate URL format first
       const urlObj = new URL(url);
       
-      // Check for realistic domains
+      // Check for realistic domains - must be exact match or subdomain
       const validDomains = ['github.com', 'pastebin.com', 'gist.github.com', 'gitlab.com', 'bitbucket.org'];
-      const isValidDomain = validDomains.some(domain => urlObj.hostname.includes(domain));
+      const isValidDomain = validDomains.some(domain => 
+        urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`)
+      );
       
       if (!isValidDomain) {
         console.warn(`URL domain not in whitelist: ${urlObj.hostname}`);
@@ -84,13 +86,13 @@ const App: React.FC = () => {
       }
       
       // Check if URL looks like a real resource (not just a search query)
-      if (url.includes('/search?q=') && !url.includes('github.com')) {
-        // Google search URLs are informational, not direct resources
+      if (urlObj.pathname.includes('/search')) {
+        // Search URLs are informational, not direct resources
         return false;
       }
       
       // For GitHub URLs, validate they point to actual resources
-      if (urlObj.hostname.includes('github.com')) {
+      if (urlObj.hostname === 'github.com' || urlObj.hostname.endsWith('.github.com')) {
         const path = urlObj.pathname;
         // Valid patterns: /user/repo, /user/repo/blob/..., /user/repo/commit/...
         const validPattern = /^\/[^\/]+\/[^\/]+(\/|$|\/(blob|tree|commit|issues|pull)\/)/;
@@ -101,7 +103,7 @@ const App: React.FC = () => {
       }
       
       // For Pastebin URLs, validate format
-      if (urlObj.hostname.includes('pastebin.com')) {
+      if (urlObj.hostname === 'pastebin.com' || urlObj.hostname.endsWith('.pastebin.com')) {
         const path = urlObj.pathname;
         // Valid pattern: /xxxxx where xxxxx is alphanumeric paste ID (typically 6-12 chars)
         const validPattern = /^\/[a-zA-Z0-9]{6,12}$/;

@@ -156,7 +156,7 @@ const App: React.FC = () => {
     }
   };
 
-  const expandNode = useCallback(async (nodeId: string, type: string, maxDepth = 1, currentDepth = 0, force = false, rootScanId?: string) => {
+  const expandNode = useCallback(async (nodeId: string, type: string, maxDepth = 1, currentDepth = 0, force = false, rootScanId?: string, isRootNode = false) => {
     if (currentDepth > maxDepth || scanAborted) return;
     
     const expansionKey = `${nodeId}-depth-${currentDepth}-max-${maxDepth}`;
@@ -180,7 +180,7 @@ const App: React.FC = () => {
     const isEth = nodeId.toLowerCase().startsWith('0x');
     const unit = isEth ? 'ETH' : 'BTC';
     
-    console.log(`Expanding ${type} node: ${nodeId} (depth: ${currentDepth}/${maxDepth}, force: ${force}, scanning: ${!!rootScanId})`);
+    console.log(`Expanding ${type} node: ${nodeId.substring(0, 12)}... (depth: ${currentDepth}/${maxDepth}, force: ${force}, isRoot: ${isRootNode})`);
 
     try {
       if (type === 'address' || type === 'eth_address') {
@@ -202,10 +202,12 @@ const App: React.FC = () => {
           detailedAddressInfo = null;
         }
         
-        const limit = force ? 150 : currentDepth === 0 ? 50 : 20;
+        // For root node with deep scan, get ALL transactions (up to 200)
+        // For other nodes, use normal limits
+        const limit = isRootNode && force ? 200 : force ? 150 : currentDepth === 0 ? 50 : 20;
         let targetTxs = (txs || []).slice(0, limit);
         
-        console.log(`Processing ${targetTxs.length} transactions for address ${nodeId.substring(0, 12)}...`);
+        console.log(`Processing ${targetTxs.length} transactions for ${isRootNode ? 'ROOT' : 'child'} address ${nodeId.substring(0, 12)}...`);
         
         // Apply date filtering if enabled
         if (dateFilter.startDate && dateFilter.endDate) {
@@ -268,9 +270,14 @@ const App: React.FC = () => {
             addNode(txNode);
             addLink({ source: nodeId, target: txNode.id, value: 2, label: `${amtString} ${unit}` });
             
-            if (currentDepth < maxDepth && !scanAborted) {
-              // Only use force for root node, not for children to prevent over-expansion
-              await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, false, rootScanId);
+            // For root node deep scan, expand transaction to get connected addresses (depth 1 only)
+            // For normal nodes, respect depth limits
+            if (isRootNode && force && currentDepth === 0) {
+              // Root deep scan: expand transactions to show connected addresses
+              await expandNode(txNode.id, 'transaction', 1, 0, false, rootScanId, false);
+            } else if (currentDepth < maxDepth && !scanAborted) {
+              // Normal expansion for non-root nodes
+              await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, false, rootScanId, false);
             }
           } catch (e) {
             console.warn(`Error processing transaction ${tx.txid}:`, e);
@@ -285,8 +292,10 @@ const App: React.FC = () => {
           });
           
           if (txData) {
-            const limit = force ? 100 : 50;
-            console.log(`Processing transaction ${nodeId} with ${(txData.vin?.length || 0)} inputs and ${(txData.vout?.length || 0)} outputs`);
+            // For root node with deep scan, get ALL inputs/outputs
+            // For other nodes, use normal limits
+            const limit = isRootNode && force ? 200 : force ? 100 : 50;
+            console.log(`Processing ${isRootNode ? 'ROOT' : 'child'} transaction ${nodeId.substring(0, 12)}... with ${(txData.vin?.length || 0)} inputs and ${(txData.vout?.length || 0)} outputs`);
             
             for (const input of (txData.vin || []).slice(0, limit)) {
               if (scanAborted) break;
@@ -302,9 +311,10 @@ const App: React.FC = () => {
                 };
                 addNode(inNode);
                 addLink({ source: addr, target: nodeId, value: 1, label: valStr });
-                if (currentDepth < maxDepth && !scanAborted) {
-                  // Only use force for root node, not for children to prevent over-expansion
-                  await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, false, rootScanId);
+                // For root node deep scan, don't expand sender addresses further
+                // For normal nodes, respect depth limits
+                if (!isRootNode && currentDepth < maxDepth && !scanAborted) {
+                  await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, false, rootScanId, false);
                 }
               }
             }
@@ -323,9 +333,10 @@ const App: React.FC = () => {
                 };
                 addNode(outNode);
                 addLink({ source: nodeId, target: addr, value: 1, label: valStr });
-                if (currentDepth < maxDepth && !scanAborted) {
-                  // Only use force for root node, not for children to prevent over-expansion
-                  await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, false, rootScanId);
+                // For root node deep scan, don't expand receiver addresses further
+                // For normal nodes, respect depth limits
+                if (!isRootNode && currentDepth < maxDepth && !scanAborted) {
+                  await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, false, rootScanId, false);
                 }
               }
             }
@@ -358,8 +369,9 @@ const App: React.FC = () => {
     
     try {
       const depth = hyperMode ? 8 : Math.max(scanDepth, 2); // Minimum depth 2 for meaningful deep scan
-      console.log(`Starting DEEP scan on ${selectedNode.type} (${selectedNode.id.substring(0, 12)}...) with depth: ${depth}`);
-      await expandNode(selectedNode.id, selectedNode.type, depth, 0, true, selectedNode.id);
+      const isRoot = selectedNode.isRoot || false;
+      console.log(`Starting DEEP scan on ${selectedNode.type} (${selectedNode.id.substring(0, 12)}...) with depth: ${depth}, isRoot: ${isRoot}`);
+      await expandNode(selectedNode.id, selectedNode.type, depth, 0, true, selectedNode.id, isRoot);
       console.log(`DEEP scan completed for ${selectedNode.id.substring(0, 12)}...`);
     } catch (err) {
       console.error('Deep scan error:', err);
@@ -1135,7 +1147,7 @@ const App: React.FC = () => {
         });
 
         await Promise.all([
-          expandNode(val, root.type, 1, 0, false), // Depth 1: only direct transactions linked to wallet
+          expandNode(val, root.type, 1, 0, false, undefined, false), // Depth 1: only direct transactions linked to wallet
           handleOSINTSweep(val)
         ]);
       } else if (type === SearchType.TX) {
@@ -1183,7 +1195,7 @@ const App: React.FC = () => {
         }
         
         await Promise.all([
-          expandNode(val, 'transaction', 1, 0, false), // Depth 1: only direct addresses from transaction
+          expandNode(val, 'transaction', 1, 0, false, undefined, false), // Depth 1: only direct addresses from transaction
           handleOSINTSweep(val)
         ]);
       }

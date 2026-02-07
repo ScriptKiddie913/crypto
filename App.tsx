@@ -133,7 +133,7 @@ const App: React.FC = () => {
     try {
       if (type === 'address' || type === 'eth_address') {
         const txs = await blockchainService.getAddressTxs(nodeId).catch(() => []);
-        // Increased limits: get ALL transactions for addresses (up to API limit of 100)
+        // Increased limits: get up to 100 transactions (API limit)
         const limit = force ? 100 : 50;
         const targetTxs = (txs || []).slice(0, limit);
         
@@ -196,7 +196,7 @@ const App: React.FC = () => {
       } else if (type === 'transaction') {
         const txData = await blockchainService.getTransaction(nodeId).catch(() => null);
         if (txData) {
-          // Increased limits: get ALL inputs/outputs (up to 100)
+          // Increased limits: get up to 100 inputs/outputs
           const limit = force ? 100 : 50;
           
           for (const input of (txData.vin || []).slice(0, limit)) {

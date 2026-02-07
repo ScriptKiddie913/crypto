@@ -204,7 +204,8 @@ const App: React.FC = () => {
         
         // For root node with deep scan, get ALL transactions (up to 200)
         // For other nodes, use normal limits
-        const limit = isRootNode && force ? 200 : force ? 150 : currentDepth === 0 ? 50 : 20;
+        // For initial query (not forced), use minimal limits to keep graph clean
+        const limit = isRootNode && force ? 200 : force ? 150 : currentDepth === 0 ? 10 : 5;
         let targetTxs = (txs || []).slice(0, limit);
         
         console.log(`Processing ${targetTxs.length} transactions for ${isRootNode ? 'ROOT' : 'child'} address ${nodeId.substring(0, 12)}...`);
@@ -294,7 +295,8 @@ const App: React.FC = () => {
           if (txData) {
             // For root node with deep scan, get ALL inputs/outputs
             // For other nodes, use normal limits
-            const limit = isRootNode && force ? 200 : force ? 100 : 50;
+            // For initial query, keep it minimal
+            const limit = isRootNode && force ? 200 : force ? 100 : 5;
             console.log(`Processing ${isRootNode ? 'ROOT' : 'child'} transaction ${nodeId.substring(0, 12)}... with ${(txData.vin?.length || 0)} inputs and ${(txData.vout?.length || 0)} outputs`);
             
             for (const input of (txData.vin || []).slice(0, limit)) {

@@ -75,6 +75,77 @@ const fetchWithFallback = async (endpoint: string, options: RequestInit = {}, ti
 };
 
 export const blockchainService = {
+  async getDetailedAddressInfo(address: string) {
+    try {
+      const type = this.detectSearchType(address);
+      const basicInfo = await this.getAddress(address);
+      
+      if (type === SearchType.ETH_ADDRESS) {
+        // Enhanced Ethereum address analysis
+        const ethDetails = await this.analyzeEthereumAddress(address);
+        return { ...basicInfo, ...ethDetails };
+      } else {
+        // Enhanced Bitcoin address analysis  
+        const btcDetails = await this.analyzeBitcoinAddress(address);
+        return { ...basicInfo, ...btcDetails };
+      }
+    } catch (e) {
+      console.warn('Detailed address info failed:', e);
+      return null;
+    }
+  },
+
+  async analyzeEthereumAddress(address: string) {
+    try {
+      const [balanceRes, txCountRes] = await Promise.all([
+        fetch(`https://eth.blockscout.com/api/v2/addresses/${address}`).catch(() => null),
+        fetch(`https://eth.blockscout.com/api/v2/addresses/${address}/transactions?filter=to%7Cfrom&limit=1`).catch(() => null)
+      ]);
+      
+      const extra: any = {};
+      
+      if (balanceRes?.ok) {
+        const balanceData = await balanceRes.json();
+        extra.contract_info = {
+          is_contract: !!balanceData.is_contract,
+          contract_name: balanceData.name || null,
+          creation_tx: balanceData.creation_tx_hash || null
+        };
+        extra.token_holdings = balanceData.token?.length || 0;
+        extra.last_activity = balanceData.timestamp || null;
+      }
+      
+      return extra;
+    } catch (e) {
+      return {};
+    }
+  },
+
+  async analyzeBitcoinAddress(address: string) {
+    try {
+      const addressInfo = await this.getAddress(address);
+      
+      return {
+        address_type: this.getBitcoinAddressType(address),
+        utxo_count: addressInfo.chain_stats?.funded_txo_count - addressInfo.chain_stats?.spent_txo_count || 0,
+        total_received: addressInfo.chain_stats?.funded_txo_sum || 0,
+        total_sent: addressInfo.chain_stats?.spent_txo_sum || 0,
+        first_seen: null, // Would need additional API call
+        last_seen: null
+      };
+    } catch (e) {
+      return {};
+    }
+  },
+
+  getBitcoinAddressType(address: string): string {
+    if (address.startsWith('bc1q')) return 'Native SegWit (P2WPKH)';
+    if (address.startsWith('bc1p')) return 'Taproot (P2TR)';
+    if (address.startsWith('3')) return 'SegWit Compatible (P2SH)';
+    if (address.startsWith('1')) return 'Legacy (P2PKH)';
+    return 'Unknown';
+  },
+
   detectSearchType(query: string): SearchType {
     const q = query.trim();
     if (!q) return SearchType.UNKNOWN;

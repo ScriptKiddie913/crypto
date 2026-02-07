@@ -168,12 +168,33 @@ export const blockchainService = {
     if (cache.address.has(address)) return cache.address.get(address)!;
     const type = this.detectSearchType(address);
     if (type === SearchType.ETH_ADDRESS) {
-      const res = await fetch(`https://eth.blockscout.com/api/v2/addresses/${address}`);
-      if (res.ok) {
-        const raw = await res.json();
-        const result = { address: raw.hash, chain_stats: { funded_txo_sum: parseFloat(raw.coin_balance || "0"), spent_txo_sum: 0, tx_count: 0, funded_txo_count: 0, spent_txo_count: 0 } } as any;
-        cache.address.set(address, result);
-        return result;
+      try {
+        const res = await fetch(`https://eth.blockscout.com/api/v2/addresses/${address}`);
+        if (res.ok) {
+          const raw = await res.json();
+          const balance = parseFloat(raw.coin_balance || "0") / 1e18;
+          const result = { 
+            address: raw.hash, 
+            chain_stats: { 
+              funded_txo_sum: parseFloat(raw.coin_balance || "0"), 
+              spent_txo_sum: 0, 
+              tx_count: raw.transactions_count || 0,
+              funded_txo_count: raw.transactions_count || 0, 
+              spent_txo_count: 0 
+            },
+            mempool_stats: {
+              funded_txo_count: 0,
+              funded_txo_sum: 0,
+              spent_txo_count: 0,
+              spent_txo_sum: 0,
+              tx_count: 0
+            }
+          } as AddressInfo;
+          cache.address.set(address, result);
+          return result;
+        }
+      } catch (e) {
+        console.warn('Ethereum address fetch failed:', e);
       }
     }
     const result = await fetchWithFallback(`/address/${address}`);
@@ -185,23 +206,40 @@ export const blockchainService = {
     if (cache.addressTxs.has(address)) return cache.addressTxs.get(address)!;
     const type = this.detectSearchType(address);
     if (type === SearchType.ETH_ADDRESS) {
-      const res = await fetch(`https://eth.blockscout.com/api/v2/addresses/${address}/transactions?limit=100`);
-      if (res.ok) {
-        const raw = await res.json();
-        const result = (raw.items || []).map((t: any) => ({
-          txid: t.hash,
-          fee: parseFloat(t.fee?.value || "0"),
-          status: { confirmed: !!t.block, block_height: t.block, block_time: t.timestamp ? new Date(t.timestamp).getTime()/1000 : undefined },
-          vin: [{ prevout: { scriptpubkey_address: t.from?.hash, value: parseFloat(t.value || "0") } }],
-          vout: [{ scriptpubkey_address: t.to?.hash, value: parseFloat(t.value || "0") }]
-        }));
-        cache.addressTxs.set(address, result);
-        return result;
+      try {
+        const res = await fetch(`https://eth.blockscout.com/api/v2/addresses/${address}/transactions?limit=100`);
+        if (res.ok) {
+          const raw = await res.json();
+          const result = (raw.items || []).map((t: any) => ({
+            txid: t.hash,
+            fee: parseFloat(t.fee?.value || "0"),
+            status: { 
+              confirmed: !!t.block, 
+              block_height: t.block?.height, 
+              block_time: t.timestamp ? Math.floor(new Date(t.timestamp).getTime()/1000) : undefined 
+            },
+            vin: [{ prevout: { scriptpubkey_address: t.from?.hash, value: parseFloat(t.value || "0") } }],
+            vout: [{ scriptpubkey_address: t.to?.hash, value: parseFloat(t.value || "0") }],
+            size: t.gas_used || 0,
+            weight: t.gas_used || 0,
+            version: 1,
+            locktime: 0
+          }));
+          cache.addressTxs.set(address, result);
+          return result;
+        }
+      } catch (e) {
+        console.warn('Ethereum transactions fetch failed:', e);
       }
     }
-    const result = await fetchWithFallback(`/address/${address}/txs`);
-    cache.addressTxs.set(address, result);
-    return result;
+    try {
+      const result = await fetchWithFallback(`/address/${address}/txs`);
+      cache.addressTxs.set(address, result);
+      return result;
+    } catch (e) {
+      console.warn('Bitcoin transactions fetch failed:', e);
+      return [];
+    }
   },
 
   async getTransaction(txid: string): Promise<Transaction> {

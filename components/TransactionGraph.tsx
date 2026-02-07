@@ -22,6 +22,7 @@ interface Props {
   links: LinkData[];
   onNodeClick: (node: NodeData) => void;
   selectedNodeId?: string;
+  scanningNodeId?: string | null;
 }
 
 const ICONS = {
@@ -57,7 +58,7 @@ const getNodeFilter = (d: NodeData) => {
   return 'url(#backlit-default)';
 };
 
-const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selectedNodeId }) => {
+const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selectedNodeId, scanningNodeId }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const simulationRef = useRef<d3.Simulation<D3Node, undefined> | null>(null);
@@ -169,8 +170,7 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
                 d.fx = null; d.fy = null;
               }));
 
-          gEnter.append("circle").attr("class", "selection-ring").attr("r", 50).attr("fill", "none").attr("stroke", "#10b981").attr("stroke-width", 3).style("opacity", 0);
-          gEnter.append("circle").attr("class", "halo").attr("r", 36).attr("fill", "none").attr("stroke-width", 3).attr("stroke-opacity", 0.9);
+          gEnter.append("circle").attr("class", "selection-ring").attr("r", 50).attr("fill", "none").attr("stroke", "#10b981").attr("stroke-width", 3).style("opacity", 0);        gEnter.append("circle").attr("class", "scanning-ring").attr("r", 55).attr("fill", "none").attr("stroke", "#ef4444").attr("stroke-width", 4).style("opacity", 0).attr("stroke-dasharray", "10,5");          gEnter.append("circle").attr("class", "halo").attr("r", 36).attr("fill", "none").attr("stroke-width", 3).attr("stroke-opacity", 0.9);
           gEnter.append("circle").attr("class", "core-glass").attr("r", 32).attr("fill", "#05070c").attr("stroke", "rgba(255,255,255,0.1)");
 
           gEnter.append("path")
@@ -202,18 +202,38 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
         }
       );
 
-    // Update styling for existing nodes
+    // Update styling for existing nodes with performance optimization
+    const updateBatch = node.selectAll("circle.selection-ring, circle.scanning-ring, circle.halo, path.neon-icon");
+    
     node.select("circle.selection-ring").style("opacity", d => d.id === selectedNodeId ? 1 : 0);
+    
+    // Animate scanning ring for the node being scanned
+    node.select("circle.scanning-ring")
+      .style("opacity", d => d.id === scanningNodeId ? 1 : 0)
+      .attr("transform", d => d.id === scanningNodeId ? "rotate(0)" : "")
+      .transition()
+      .duration(2000)
+      .ease(d3.easeLinear)
+      .attr("transform", d => d.id === scanningNodeId ? "rotate(360)" : "")
+      .on("end", function(d) {
+        if (d.id === scanningNodeId) {
+          d3.select(this).transition().duration(0).attr("transform", "rotate(0)").transition().duration(2000).ease(d3.easeLinear).attr("transform", "rotate(360)").on("end", arguments.callee);
+        }
+      });
+    
     node.select("circle.halo").attr("stroke", d => getNodeColor(d)).attr("filter", d => getNodeFilter(d));
     node.select("path.neon-icon").attr("stroke", d => getNodeColor(d)).attr("filter", d => getNodeFilter(d));
 
     simulation.on("tick", () => {
-      link.attr("x1", (d: any) => d.source.x).attr("y1", (d: any) => d.source.y).attr("x2", (d: any) => d.target.x).attr("y2", (d: any) => d.target.y);
-      node.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+      // Optimize by using requestAnimationFrame for smoother rendering
+      requestAnimationFrame(() => {
+        link.attr("x1", (d: any) => d.source.x).attr("y1", (d: any) => d.source.y).attr("x2", (d: any) => d.target.x).attr("y2", (d: any) => d.target.y);
+        node.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+      });
     });
 
     simulation.alpha(0.5).restart();
-  }, [nodes, links, onNodeClick, selectedNodeId]);
+  }, [nodes, links, onNodeClick, selectedNodeId, scanningNodeId]);
 
   return (
     <div ref={containerRef} className="w-full h-full relative bg-transparent overflow-hidden">

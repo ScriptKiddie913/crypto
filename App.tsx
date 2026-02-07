@@ -42,6 +42,12 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [socialLoading, setSocialLoading] = useState(false);
   const [deepLoading, setDeepLoading] = useState(false);
+  const [scanningNodeId, setScanningNodeId] = useState<string | null>(null);
+  const [scanDepth, setScanDepth] = useState(2);
+  const [hyperMode, setHyperMode] = useState(false);
+  const [scanAborted, setScanAborted] = useState(false);
+  const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
+  const [showDateFilter, setShowDateFilter] = useState(false);
 
   const seenNodes = useRef<Set<string>>(new Set());
   const seenLinks = useRef<Set<string>>(new Set());
@@ -149,32 +155,61 @@ const App: React.FC = () => {
     }
   };
 
-  const expandNode = useCallback(async (nodeId: string, type: string, maxDepth = 2, currentDepth = 0, force = false) => {
-    if (currentDepth >= maxDepth) return;
+  const expandNode = useCallback(async (nodeId: string, type: string, maxDepth = 2, currentDepth = 0, force = false, rootScanId?: string) => {
+    if (currentDepth >= maxDepth || scanAborted) return;
     
     const expansionKey = `${nodeId}-depth-${currentDepth}-max-${maxDepth}`;
     if (!force && expandedNodes.current.has(expansionKey)) return;
     expandedNodes.current.add(expansionKey);
+    
+    // Set scanning indicator for root node
+    if (currentDepth === 0 && rootScanId) {
+      setScanningNodeId(rootScanId);
+    }
 
     const isEth = nodeId.toLowerCase().startsWith('0x');
     const unit = isEth ? 'ETH' : 'BTC';
     
-    console.log(`Expanding ${type} node: ${nodeId} (depth: ${currentDepth}/${maxDepth}, force: ${force})`);
+    console.log(`Expanding ${type} node: ${nodeId} (depth: ${currentDepth}/${maxDepth}, force: ${force}, scanning: ${!!rootScanId})`);
 
     try {
       if (type === 'address' || type === 'eth_address') {
-        // Enhanced transaction data collection
-        const [txs, detailedAddressInfo] = await Promise.all([
-          blockchainService.getAddressTxs(nodeId).catch(() => []),
-          blockchainService.getDetailedAddressInfo(nodeId).catch(() => null)
-        ]);
+        // Enhanced transaction data collection with retries
+        let txs, detailedAddressInfo;
+        try {
+          [txs, detailedAddressInfo] = await Promise.all([
+            blockchainService.getAddressTxs(nodeId).catch(async e => {
+              console.warn(`First attempt failed for ${nodeId}:`, e);
+              // Retry once after a short delay
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              return blockchainService.getAddressTxs(nodeId).catch(() => []);
+            }),
+            blockchainService.getDetailedAddressInfo(nodeId).catch(() => null)
+          ]);
+        } catch (e) {
+          console.error(`Failed to fetch data for ${nodeId}:`, e);
+          txs = [];
+          detailedAddressInfo = null;
+        }
         
-        const limit = force ? 150 : currentDepth === 0 ? 100 : 50; // Unlimited scanning - much higher limits
-        const targetTxs = (txs || []).slice(0, limit);
+        const limit = force ? 150 : currentDepth === 0 ? 100 : 50;
+        let targetTxs = (txs || []).slice(0, limit);
         
-        console.log(`Found ${targetTxs.length} transactions for address ${nodeId.substring(0, 12)}...`);
+        console.log(`Processing ${targetTxs.length} transactions for address ${nodeId.substring(0, 12)}...`);
+        
+        // Apply date filtering if enabled
+        if (dateFilter.startDate && dateFilter.endDate) {
+          const startTime = new Date(dateFilter.startDate).getTime() / 1000;
+          const endTime = new Date(dateFilter.endDate).getTime() / 1000;
+          targetTxs = targetTxs.filter(tx => {
+            const txTime = tx.status?.block_time;
+            return txTime && txTime >= startTime && txTime <= endTime;
+          });
+          console.log(`After date filtering: ${targetTxs.length} transactions`);
+        }
         
         for (const tx of targetTxs) {
+          if (scanAborted) break;
           try {
             const totalOut = (tx.vout || []).reduce((sum, v) => sum + (v.value || 0), 0);
             const totalIn = (tx.vin || []).reduce((sum, v) => sum + (v.prevout?.value || 0), 0);
@@ -223,55 +258,69 @@ const App: React.FC = () => {
             addNode(txNode);
             addLink({ source: nodeId, target: txNode.id, value: 2, label: `${amtString} ${unit}` });
             
-            if (currentDepth + 1 < maxDepth) {
-              await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, force);
+            if (currentDepth + 1 < maxDepth && !scanAborted) {
+              await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, force, rootScanId);
             }
           } catch (e) {
+            console.warn(`Error processing transaction ${tx.txid}:`, e);
             continue;
           }
         }
       } else if (type === 'transaction') {
-        const txData = await blockchainService.getTransaction(nodeId).catch(() => null);
-        if (txData) {
-          const limit = force ? 100 : 50; // Much higher limits for unlimited wallet linking
+        try {
+          const txData = await blockchainService.getTransaction(nodeId).catch(e => {
+            console.warn(`Transaction fetch failed for ${nodeId}:`, e);
+            return null;
+          });
           
-          for (const input of (txData.vin || []).slice(0, limit)) {
-            const addr = input.prevout?.scriptpubkey_address;
-            if (addr) {
-              const val = input.prevout?.value || 0;
-              const valStr = `${isEth ? (val/1e18).toFixed(6) : (val/1e8).toFixed(6)} ${unit}`;
-              const inNode: NodeData = {
-                id: addr,
-                type: addr.toLowerCase().startsWith('0x') ? 'eth_address' : 'address',
-                label: `${addr.substring(0, 12)}...`,
-                details: { address: addr, role: 'SENDER/INPUT', flow: valStr }
-              };
-              addNode(inNode);
-              addLink({ source: addr, target: nodeId, value: 1, label: valStr });
-              if (currentDepth + 1 < maxDepth) {
-                await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, force);
+          if (txData) {
+            const limit = force ? 100 : 50;
+            console.log(`Processing transaction ${nodeId} with ${(txData.vin?.length || 0)} inputs and ${(txData.vout?.length || 0)} outputs`);
+            
+            for (const input of (txData.vin || []).slice(0, limit)) {
+              if (scanAborted) break;
+              const addr = input.prevout?.scriptpubkey_address;
+              if (addr) {
+                const val = input.prevout?.value || 0;
+                const valStr = `${isEth ? (val/1e18).toFixed(6) : (val/1e8).toFixed(6)} ${unit}`;
+                const inNode: NodeData = {
+                  id: addr,
+                  type: addr.toLowerCase().startsWith('0x') ? 'eth_address' : 'address',
+                  label: `${addr.substring(0, 12)}...`,
+                  details: { address: addr, role: 'SENDER/INPUT', flow: valStr }
+                };
+                addNode(inNode);
+                addLink({ source: addr, target: nodeId, value: 1, label: valStr });
+                if (currentDepth + 1 < maxDepth && !scanAborted) {
+                  await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, force, rootScanId);
+                }
               }
             }
-          }
 
-          for (const out of (txData.vout || []).slice(0, limit)) {
-            const addr = out.scriptpubkey_address;
-            if (addr) {
-              const val = out.value || 0;
-              const valStr = `${isEth ? (val/1e18).toFixed(6) : (val/1e8).toFixed(6)} ${unit}`;
-              const outNode: NodeData = {
-                id: addr,
-                type: addr.toLowerCase().startsWith('0x') ? 'eth_address' : 'address',
-                label: `${addr.substring(0, 12)}...`,
-                details: { address: addr, role: 'RECEIVER/OUTPUT', flow: valStr }
-              };
-              addNode(outNode);
-              addLink({ source: nodeId, target: addr, value: 1, label: valStr });
-              if (currentDepth + 1 < maxDepth) {
-                await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, force);
+            for (const out of (txData.vout || []).slice(0, limit)) {
+              if (scanAborted) break;
+              const addr = out.scriptpubkey_address;
+              if (addr) {
+                const val = out.value || 0;
+                const valStr = `${isEth ? (val/1e18).toFixed(6) : (val/1e8).toFixed(6)} ${unit}`;
+                const outNode: NodeData = {
+                  id: addr,
+                  type: addr.toLowerCase().startsWith('0x') ? 'eth_address' : 'address',
+                  label: `${addr.substring(0, 12)}...`,
+                  details: { address: addr, role: 'RECEIVER/OUTPUT', flow: valStr }
+                };
+                addNode(outNode);
+                addLink({ source: nodeId, target: addr, value: 1, label: valStr });
+                if (currentDepth + 1 < maxDepth && !scanAborted) {
+                  await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, force, rootScanId);
+                }
               }
             }
+          } else {
+            console.warn(`No transaction data available for ${nodeId}`);
           }
+        } catch (err) {
+          console.error(`Error processing transaction ${nodeId}:`, err);
         }
       }
     } catch (err) {
@@ -280,13 +329,34 @@ const App: React.FC = () => {
   }, [addNode, addLink]);
 
   const handleDeepTrace = async () => {
-    if (!selectedNode || deepLoading) return;
+    if (!selectedNode) return;
+    
+    if (deepLoading) {
+      // Stop the scan
+      setScanAborted(true);
+      setDeepLoading(false);
+      setScanningNodeId(null);
+      return;
+    }
+    
     setDeepLoading(true);
+    setScanAborted(false);
     setError(null);
+    
     try {
-      await expandNode(selectedNode.id, selectedNode.type, 6, 0, true); // Increased depth for unlimited tracing
+      const depth = hyperMode ? 8 : scanDepth;
+      await expandNode(selectedNode.id, selectedNode.type, depth, 0, true, selectedNode.id);
     } finally {
       setDeepLoading(false);
+      setScanningNodeId(null);
+      setScanAborted(false);
+    }
+  };
+  
+  const toggleHyperMode = () => {
+    setHyperMode(!hyperMode);
+    if (!hyperMode) {
+      setScanDepth(8);
     }
   };
 
@@ -588,6 +658,11 @@ const App: React.FC = () => {
   }, [selectedNode]);
 
   const resetGraph = () => {
+    // Stop any running scans first
+    setScanAborted(true);
+    setDeepLoading(false);
+    setScanningNodeId(null);
+    
     setNodes([]);
     setLinks([]);
     seenNodes.current.clear();
@@ -595,9 +670,14 @@ const App: React.FC = () => {
     expandedNodes.current.clear();
     setSelectedNode(null);
     setError(null);
+    setSocialLoading(false);
+    setHyperMode(false);
+    setScanDepth(2);
+    setDateFilter({ startDate: '', endDate: '' });
+    setShowDateFilter(false);
     blockchainService.clearCache();
-    osintService.clearCache(); // Clear OSINT cache as well
-    console.log('Graph reset completed - all caches cleared');
+    osintService.clearCache();
+    console.log('Graph reset completed - all caches and states cleared');
   };
 
   const generateReport = () => {
@@ -904,24 +984,26 @@ const App: React.FC = () => {
         
         // Enhanced data collection for initial address
         const [addrData, clustering, detailedInfo, recentTxs] = await Promise.all([
-          blockchainService.getAddress(val).catch(() => null),
+          blockchainService.getAddress(val).catch(e => { console.error('Address fetch error:', e); return null; }),
           blockchainService.getClusteringHints(val, isEth).catch(() => null),
           blockchainService.getDetailedAddressInfo(val).catch(() => null),
-          blockchainService.getAddressTxs(val).catch(() => [])
+          blockchainService.getAddressTxs(val).catch(e => { console.error('Transactions fetch error:', e); return []; })
         ]);
         
-        // Calculate comprehensive address statistics
+        // Calculate comprehensive address statistics with proper error handling
         const stats = {
           total_received: addrData ? (isEth ? (addrData.chain_stats.funded_txo_sum/1e18).toFixed(8) : (addrData.chain_stats.funded_txo_sum/1e8).toFixed(8)) : "0",
           total_sent: addrData ? (isEth ? (addrData.chain_stats.spent_txo_sum/1e18).toFixed(8) : (addrData.chain_stats.spent_txo_sum/1e8).toFixed(8)) : "0",
           current_balance: addrData ? (isEth ? (addrData.chain_stats.funded_txo_sum/1e18).toFixed(8) : ((addrData.chain_stats.funded_txo_sum-addrData.chain_stats.spent_txo_sum)/1e8).toFixed(8)) : "0",
-          transaction_count: addrData?.chain_stats.tx_count || 0,
-          first_activity: recentTxs.length > 0 ? new Date(Math.min(...recentTxs.map(tx => tx.status?.block_time || 0)) * 1000).toLocaleDateString() : "Unknown",
-          last_activity: recentTxs.length > 0 ? new Date(Math.max(...recentTxs.map(tx => tx.status?.block_time || 0)) * 1000).toLocaleDateString() : "Unknown",
+          transaction_count: addrData?.chain_stats.tx_count || recentTxs.length || 0,
+          first_activity: recentTxs.length > 0 ? new Date(Math.min(...recentTxs.map(tx => tx.status?.block_time || Date.now()/1000)) * 1000).toLocaleDateString() : "Unknown",
+          last_activity: recentTxs.length > 0 ? new Date(Math.max(...recentTxs.map(tx => tx.status?.block_time || Date.now()/1000)) * 1000).toLocaleDateString() : "Unknown",
           activity_days: calculateActivityDays(recentTxs),
           avg_tx_value: calculateAverageTransactionValue(recentTxs, isEth),
           address_age_days: calculateAddressAge(recentTxs)
         };
+        
+        console.log('Address statistics:', stats);
         
         // Enhanced root node with comprehensive data
         addNode({ 
@@ -1032,30 +1114,74 @@ const App: React.FC = () => {
               />
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={startInvestigation} disabled={loading} className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-40 text-black px-12 h-16 rounded-3xl text-[12px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-3 shadow-emerald-500/30 shadow-xl border border-emerald-400/30 backdrop-blur-sm">
-                {loading ? <RefreshCw className="animate-spin" size={20} /> : <Zap size={20} />}
-                {loading ? "SCANNING..." : "INITIATE_SCAN"}
+              <button onClick={startInvestigation} disabled={loading} className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-40 text-black px-8 h-12 rounded-2xl text-[10px] font-bold uppercase tracking-wide transition-all flex items-center gap-2">
+                {loading ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />}
+                {loading ? "SCANNING..." : "SCAN"}
               </button>
               {nodes.length > 0 && (
-                <button onClick={generateReport} className="bg-gradient-to-r from-slate-700/80 to-slate-600/80 border-2 border-slate-500/30 text-slate-200 hover:text-white hover:border-emerald-400/50 hover:from-emerald-600/20 hover:to-emerald-500/20 px-8 h-16 rounded-3xl text-[11px] font-black uppercase tracking-[0.1em] transition-all duration-300 flex items-center gap-3 shadow-xl backdrop-blur-sm">
-                  <Download size={18} /> EXPORT_DOSSIER
+                <button onClick={generateReport} className="bg-slate-700/60 border border-slate-500/40 text-slate-200 hover:text-white hover:border-emerald-400/50 px-6 h-12 rounded-2xl text-[9px] font-bold uppercase tracking-wide transition-all flex items-center gap-2">
+                  <Download size={14} /> REPORT
                 </button>
               )}
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             {selectedNode && (
-              <div className="flex gap-3">
-                <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center gap-3 px-8 h-14 bg-gradient-to-r from-rose-600/20 to-rose-500/20 hover:from-rose-500/30 hover:to-rose-400/30 border-2 border-rose-400/50 rounded-3xl text-[11px] font-black text-rose-300 hover:text-rose-200 uppercase tracking-[0.15em] transition-all duration-300 shadow-lg backdrop-blur-sm">
-                  {socialLoading ? <RefreshCw size={16} className="animate-spin" /> : <Globe size={16} />} OSINT_INTELLIGENCE
+              <div className="flex items-center gap-2">
+                <button onClick={() => handleOSINTSweep(selectedNode.id)} disabled={socialLoading} className="flex items-center gap-2 px-4 h-10 bg-rose-600/15 hover:bg-rose-500/25 border border-rose-400/40 rounded-xl text-[9px] font-bold text-rose-300 hover:text-rose-200 uppercase tracking-wide transition-all duration-200">
+                  {socialLoading ? <RefreshCw size={12} className="animate-spin" /> : <Globe size={12} />} OSINT
                 </button>
-                <button onClick={handleDeepTrace} disabled={deepLoading} className="flex items-center gap-3 px-8 h-14 bg-gradient-to-r from-sky-600/20 to-sky-500/20 hover:from-sky-500/30 hover:to-sky-400/30 border-2 border-sky-400/50 rounded-3xl text-[11px] font-black text-sky-300 hover:text-sky-200 uppercase tracking-[0.15em] transition-all duration-300 shadow-lg backdrop-blur-sm">
-                  {deepLoading ? <RefreshCw size={16} className="animate-spin" /> : <Layers size={16} />} DEEP_TRACE_UNLIMITED
+                
+                <button onClick={handleDeepTrace} className={`flex items-center gap-2 px-4 h-10 rounded-xl text-[9px] font-bold uppercase tracking-wide transition-all duration-200 border ${deepLoading ? 'bg-red-600/25 border-red-400/50 text-red-200' : 'bg-sky-600/15 hover:bg-sky-500/25 border-sky-400/40 text-sky-300 hover:text-sky-200'}`}>
+                  {deepLoading ? <RefreshCw size={12} className="animate-spin" /> : <Layers size={12} />} 
+                  {deepLoading ? 'STOP' : 'DEEP'}
                 </button>
+                
+                <button onClick={toggleHyperMode} className={`flex items-center gap-1 px-3 h-10 rounded-xl text-[8px] font-bold uppercase tracking-wide transition-all duration-200 border ${hyperMode ? 'bg-purple-600/25 border-purple-400/50 text-purple-200' : 'bg-purple-600/15 border-purple-400/40 text-purple-300'}`}>
+                  <Zap size={10} /> HYPER
+                </button>
+                
+                <div className="flex items-center gap-2 bg-slate-900/30 px-3 py-2 rounded-xl border border-slate-700/30">
+                  <span className="text-[8px] font-bold text-slate-400">D:</span>
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="8" 
+                    value={hyperMode ? 8 : scanDepth}
+                    onChange={(e) => !hyperMode && setScanDepth(Number(e.target.value))}
+                    disabled={hyperMode || deepLoading}
+                    className="w-12 h-1 bg-slate-700 rounded slider"
+                  />
+                  <span className="text-[9px] font-bold text-emerald-400 w-2">{hyperMode ? 8 : scanDepth}</span>
+                </div>
+                
+                <button 
+                  onClick={() => setShowDateFilter(!showDateFilter)}
+                  className={`text-[8px] font-bold px-2 py-2 rounded-lg transition-all ${showDateFilter ? 'bg-emerald-600/20 text-emerald-400' : 'text-slate-400 hover:text-slate-300'}`}
+                >
+                  📅
+                </button>
+                
+                {showDateFilter && (
+                  <div className="flex items-center gap-1">
+                    <input 
+                      type="date" 
+                      value={dateFilter.startDate}
+                      onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-24"
+                    />
+                    <input 
+                      type="date" 
+                      value={dateFilter.endDate}
+                      onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="text-[8px] bg-slate-800 border border-slate-600 rounded px-1 py-1 text-slate-300 w-24"
+                    />
+                  </div>
+                )}
               </div>
             )}
-            {/* Performance indicator */}
+            {/* Performance indicator */}}
             <div className="text-[8px] text-slate-500 font-mono bg-black/20 px-3 py-2 rounded-lg border border-white/5">
               <div className="text-emerald-400 font-bold">NO API LIMITS</div>
               <div>Cache: {osintService.getPerformanceMetrics().cacheHitRate}</div>
@@ -1070,7 +1196,13 @@ const App: React.FC = () => {
 
         <div className="flex-1 relative bg-[#020408] overflow-hidden">
           {nodes.length > 0 ? (
-            <TransactionGraph nodes={nodes} links={links} onNodeClick={setSelectedNode} selectedNodeId={selectedNode?.id} />
+            <TransactionGraph 
+              nodes={nodes} 
+              links={links} 
+              onNodeClick={setSelectedNode} 
+              selectedNodeId={selectedNode?.id}
+              scanningNodeId={scanningNodeId}
+            />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center bg-[#020408]">
               <div className="relative mb-14">
@@ -1104,28 +1236,33 @@ const App: React.FC = () => {
           )}
 
           {selectedNode && (
-            <div className="absolute top-8 right-8 w-80 sm:w-[520px] bg-[#05070c]/98 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-8 shadow-2xl animate-in fade-in slide-in-from-right-8 z-10 max-h-[85vh] overflow-y-auto scrollbar-hide">
-              <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/5">
-                <div className="flex items-center gap-4">
-                  <div className="bg-emerald-500/10 p-3 rounded-xl text-emerald-400"><Cpu size={20} /></div>
-                  <h2 className="font-black text-xs tracking-widest uppercase text-white">MANIFEST_ENTRY</h2>
+            <div className="absolute top-4 right-4 w-72 bg-[#05070c]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 shadow-xl animate-in fade-in slide-in-from-right-4 z-10 max-h-[90vh] overflow-y-auto scrollbar-hide">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-400"><Cpu size={14} /></div>
+                  <h2 className="font-bold text-[10px] tracking-wide uppercase text-white">NODE_DATA</h2>
                 </div>
-                <button onClick={() => setSelectedNode(null)} className="text-slate-500 hover:text-white transition-colors"><X size={18} /></button>
+                <button 
+                  onClick={() => setSelectedNode(null)} 
+                  className="text-slate-500 hover:text-white transition-colors hover:bg-white/10 p-1 rounded"
+                >
+                  <X size={16} />
+                </button>
               </div>
 
-              <div className="space-y-8">
-                <div className="p-6 bg-[#0a0d14] border border-white/10 rounded-2xl break-all mono text-[12px] text-emerald-400 font-bold leading-relaxed shadow-inner">
+              <div className="space-y-4">
+                <div className="p-3 bg-[#0a0d14] border border-white/10 rounded-xl break-all mono text-[10px] text-emerald-400 font-bold leading-relaxed shadow-inner">
                   {selectedNode.id}
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-5 shadow-sm">
-                    <span className="text-[9px] uppercase font-black text-slate-500 tracking-widest block">Forensic_Class</span>
-                    <span className="text-xs font-black text-slate-100 uppercase truncate block mt-1">{selectedNode.type.replace('_', ' ')}</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white/5 border border-white/5 rounded-lg p-3">
+                    <span className="text-[8px] uppercase font-bold text-slate-500 block">TYPE</span>
+                    <span className="text-[10px] font-bold text-slate-100 uppercase block">{selectedNode.type.replace('_', ' ')}</span>
                   </div>
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-5 shadow-sm">
-                    <span className="text-[9px] uppercase font-black text-slate-500 tracking-widest block flex items-center gap-2"><TrendingDown size={10} className="text-rose-400"/> RISK_FACTOR</span>
-                    <span className={`text-xs font-black uppercase truncate block mt-1 ${selectedNode.riskScore > 50 ? 'text-rose-400' : 'text-emerald-500'}`}>{selectedNode.riskScore ?? 0}/100</span>
+                  <div className="bg-white/5 border border-white/5 rounded-lg p-3">
+                    <span className="text-[8px] uppercase font-bold text-slate-500 block">RISK</span>
+                    <span className={`text-[10px] font-bold uppercase block ${selectedNode.riskScore > 50 ? 'text-rose-400' : 'text-emerald-500'}`}>{selectedNode.riskScore ?? 0}/100</span>
                   </div>
                 </div>
 
@@ -1235,10 +1372,34 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                <div className="space-y-4">
-                  <label className="text-[9px] uppercase tracking-widest text-slate-600 font-black flex items-center gap-2">
-                    <Activity size={12} className="text-slate-500" /> FORENSIC_METADATA
+                <div className="space-y-3">
+                  <label className="text-[8px] uppercase tracking-wide text-slate-600 font-bold flex items-center gap-1">
+                    <Activity size={10} className="text-slate-500" /> WALLET_DATA
                   </label>
+                  
+                  {/* Display balance prominently */}
+                  {(selectedNode.details?.balance || selectedNode.details?.current_balance) && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                      <div className="text-[8px] font-bold text-emerald-400 uppercase mb-1">CURRENT BALANCE</div>
+                      <div className="text-sm font-bold text-emerald-300">{selectedNode.details.balance || selectedNode.details.current_balance}</div>
+                    </div>
+                  )}
+                  
+                  {/* Display transaction count and other key metrics */}
+                  {selectedNode.details?.transaction_count && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2">
+                        <div className="text-[7px] text-blue-400 font-bold uppercase">TX COUNT</div>
+                        <div className="text-xs font-bold text-blue-300">{selectedNode.details.transaction_count}</div>
+                      </div>
+                      {selectedNode.details.total_received && (
+                        <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-2">
+                          <div className="text-[7px] text-green-400 font-bold uppercase">RECEIVED</div>
+                          <div className="text-xs font-bold text-green-300">{selectedNode.details.total_received}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   
                   {/* Enhanced display for transaction details */}
                   {selectedNode.type === 'transaction' && (
@@ -1322,14 +1483,14 @@ const App: React.FC = () => {
                     </div>
                   )}
                   
-                  <div className="grid grid-cols-1 gap-2">
+                  <div className="grid grid-cols-1 gap-1">
                     {Object.entries(selectedNode.details || {}).map(([key, val]) => {
-                      // Skip keys that are already displayed in enhanced sections
-                      if (['identifier', 'status', 'osint', 'context', 'url', 'type', 'category', 'tier', 'balance', 'clustering_label', 'identity_pivot', 'net_balance', 'forensic_tier', 'threat_risk', 'entity_type', 'confidence', 'parent_wallet', 'flow_captured', 'role', 'flow', 'source_engine', 'extracted', 'origin_paste', 'forensic_role', 'flow_value', 'repo', 'path', 'repo_url', 'repo_desc', 'match_type', 'risk_indicators', 'privacy_score', 'complexity_score', 'complexity_rating', 'total_inputs', 'total_outputs', 'input_amount', 'amount', 'address_analysis', 'activity_days', 'transaction_count', 'avg_tx_value', 'network_type'].includes(key)) return null;
+                      // Skip keys that are already displayed
+                      if (['identifier', 'status', 'osint', 'context', 'url', 'type', 'category', 'tier', 'balance', 'current_balance', 'clustering_label', 'identity_pivot', 'net_balance', 'forensic_tier', 'threat_risk', 'entity_type', 'confidence', 'parent_wallet', 'flow_captured', 'role', 'flow', 'source_engine', 'extracted', 'origin_paste', 'forensic_role', 'flow_value', 'repo', 'path', 'repo_url', 'repo_desc', 'match_type', 'risk_indicators', 'privacy_score', 'complexity_score', 'complexity_rating', 'total_inputs', 'total_outputs', 'input_amount', 'amount', 'address_analysis', 'activity_days', 'transaction_count', 'avg_tx_value', 'network_type', 'total_received', 'total_sent'].includes(key)) return null;
                       return (
-                        <div key={key} className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-xl group hover:bg-white/10 transition-all">
-                          <span className="text-[9px] uppercase font-black text-slate-500 tracking-widest truncate max-w-[150px]">{key.replace(/_/g, ' ')}</span>
-                          <span className="text-[11px] font-bold text-slate-300 truncate ml-4">{String(val)}</span>
+                        <div key={key} className="flex items-center justify-between p-2 bg-white/5 border border-white/5 rounded-lg text-[8px]">
+                          <span className="uppercase font-bold text-slate-500 truncate">{key.replace(/_/g, ' ')}</span>
+                          <span className="font-bold text-slate-300 truncate ml-2">{String(val).substring(0, 20)}</span>
                         </div>
                       );
                     })}

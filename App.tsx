@@ -1283,7 +1283,7 @@ const App: React.FC = () => {
         });
 
         await Promise.all([
-          expandNode(val, root.type, 0, 0, false, undefined, false), // Depth 0: ONLY direct transactions, no address expansion
+          expandNode(val, root.type, 1, 0, false, undefined, false), // Depth 1: address → transactions → addresses from those transactions
           handleOSINTSweep(val)
         ]);
       } else if (type === SearchType.TX) {
@@ -1331,7 +1331,7 @@ const App: React.FC = () => {
         }
         
         await Promise.all([
-          expandNode(val, 'transaction', 0, 0, false, undefined, false), // Depth 0: ONLY direct addresses, no transaction expansion
+          expandNode(val, 'transaction', 1, 0, false, undefined, false), // Depth 1: transaction → addresses → transactions from those addresses
           handleOSINTSweep(val)
         ]);
       }

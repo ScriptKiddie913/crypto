@@ -133,8 +133,12 @@ const App: React.FC = () => {
     try {
       if (type === 'address' || type === 'eth_address') {
         const txs = await blockchainService.getAddressTxs(nodeId).catch(() => []);
-        const limit = force ? 40 : 15;
+        // Increased limits: get ALL transactions for addresses (up to API limit of 100)
+        const limit = force ? 100 : 50;
         const targetTxs = (txs || []).slice(0, limit);
+        
+        // Track related wallets that appear in this address's transactions
+        const relatedWallets = new Set<string>();
         
         for (const tx of targetTxs) {
           try {
@@ -158,6 +162,16 @@ const App: React.FC = () => {
             addNode(txNode);
             addLink({ source: nodeId, target: txNode.id, value: 2, label: `${amtString} ${unit}` });
             
+            // Collect all related wallet addresses from this transaction
+            (tx.vin || []).forEach(input => {
+              const addr = input.prevout?.scriptpubkey_address;
+              if (addr && addr !== nodeId) relatedWallets.add(addr);
+            });
+            (tx.vout || []).forEach(output => {
+              const addr = output.scriptpubkey_address;
+              if (addr && addr !== nodeId) relatedWallets.add(addr);
+            });
+            
             if (currentDepth + 1 < maxDepth) {
               await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, force);
             }
@@ -165,10 +179,25 @@ const App: React.FC = () => {
             continue;
           }
         }
+        
+        // Add all related wallets as nodes with links to show wallet relationships
+        for (const walletAddr of relatedWallets) {
+          const walletType = walletAddr.toLowerCase().startsWith('0x') ? 'eth_address' : 'address';
+          const walletNode: NodeData = {
+            id: walletAddr,
+            type: walletType,
+            label: `${walletAddr.substring(0, 12)}...`,
+            details: { address: walletAddr, related_to: nodeId }
+          };
+          addNode(walletNode);
+          // Create bidirectional link to show relationship
+          addLink({ source: nodeId, target: walletAddr, value: 1, label: 'RELATED_WALLET' });
+        }
       } else if (type === 'transaction') {
         const txData = await blockchainService.getTransaction(nodeId).catch(() => null);
         if (txData) {
-          const limit = force ? 30 : 12;
+          // Increased limits: get ALL inputs/outputs (up to 100)
+          const limit = force ? 100 : 50;
           
           for (const input of (txData.vin || []).slice(0, limit)) {
             const addr = input.prevout?.scriptpubkey_address;
@@ -219,7 +248,31 @@ const App: React.FC = () => {
     setDeepLoading(true);
     setError(null);
     try {
-      await expandNode(selectedNode.id, selectedNode.type, 4, 0, true);
+      // Deep scan: increased depth to 6 for comprehensive analysis
+      // This will explore: Node -> Tx -> Address -> Tx -> Address -> Tx -> Address
+      await expandNode(selectedNode.id, selectedNode.type, 6, 0, true);
+      
+      // For addresses, also fetch and add clustering hints for deeper analysis
+      if (selectedNode.type === 'address' || selectedNode.type === 'eth_address') {
+        const isEth = selectedNode.type === 'eth_address';
+        try {
+          const clustering = await blockchainService.getClusteringHints(selectedNode.id, isEth);
+          if (clustering && clustering.clustering_label) {
+            addNode({
+              ...selectedNode,
+              label: clustering.clustering_label,
+              riskScore: clustering.threat_risk || selectedNode.riskScore,
+              details: {
+                ...selectedNode.details,
+                ...clustering,
+                deep_scan_complete: true
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Clustering analysis failed during deep scan');
+        }
+      }
     } finally {
       setDeepLoading(false);
     }
@@ -459,12 +512,14 @@ const App: React.FC = () => {
           details: { ...root.details, ...clustering, balance: addrData ? `${(isEth ? addrData.chain_stats.funded_txo_sum/1e18 : (addrData.chain_stats.funded_txo_sum-addrData.chain_stats.spent_txo_sum)/1e8).toFixed(6)} ${unit}` : "0.00" }
         });
 
+        // Increased initial depth to 3 for better transaction and wallet discovery
         await Promise.all([
-          expandNode(val, root.type, 2, 0, true),
+          expandNode(val, root.type, 3, 0, true),
           handleOSINTSweep(val)
         ]);
       } else if (type === SearchType.TX) {
-        await expandNode(val, 'transaction', 2, 0, true);
+        // Increased initial depth to 3 for transaction queries too
+        await expandNode(val, 'transaction', 3, 0, true);
         await handleOSINTSweep(val);
       }
     } catch (err: any) {

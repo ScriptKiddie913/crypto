@@ -368,8 +368,12 @@ const App: React.FC = () => {
     setError(null);
     
     try {
-      const depth = hyperMode ? 8 : Math.max(scanDepth, 3); // Minimum depth 3 for meaningful deep scan
       const isRoot = selectedNode.isRoot || false;
+      
+      // For root nodes: get all direct connections (special behavior)
+      // For normal nodes: cap at depth 3 maximum (selected → connected → sub-connected)
+      const depth = isRoot ? (hyperMode ? 8 : Math.max(scanDepth, 3)) : 3;
+      
       console.log(`Starting DEEP scan on ${selectedNode.type} (${selectedNode.id.substring(0, 12)}...) with depth: ${depth}, isRoot: ${isRoot}`);
       await expandNode(selectedNode.id, selectedNode.type, depth, 0, true, selectedNode.id, isRoot);
       console.log(`DEEP scan completed for ${selectedNode.id.substring(0, 12)}...`);

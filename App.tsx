@@ -1181,7 +1181,7 @@ const App: React.FC = () => {
                 )}
               </div>
             )}
-            {/* Performance indicator */}}
+            {/* Performance indicator */}
             <div className="text-[8px] text-slate-500 font-mono bg-black/20 px-3 py-2 rounded-lg border border-white/5">
               <div className="text-emerald-400 font-bold">NO API LIMITS</div>
               <div>Cache: {osintService.getPerformanceMetrics().cacheHitRate}</div>

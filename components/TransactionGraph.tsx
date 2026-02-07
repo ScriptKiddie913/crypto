@@ -281,11 +281,11 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
           left: window.innerWidth < 640 ? '1rem' : Math.min(tooltipPos.x + 16, window.innerWidth - 340), 
           top: window.innerWidth < 640 ? '5rem' : Math.min(tooltipPos.y + 16, window.innerHeight - 200) 
         }}>
-          <div className=\"flex items-center gap-2 mb-2\">
-            <div className=\"w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.3)]\" style={{ backgroundColor: getNodeColor(hoveredNode) }} />
-            <span className=\"text-[8px] sm:text-[9px] font-bold uppercase text-slate-400 tracking-wider\">{hoveredNode.type.replace('_', ' ')}</span>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.3)]" style={{ backgroundColor: getNodeColor(hoveredNode) }} />
+            <span className="text-[8px] sm:text-[9px] font-bold uppercase text-slate-400 tracking-wider">{hoveredNode.type.replace('_', ' ')}</span>
           </div>
-          <p className=\"text-[10px] sm:text-[11px] mono text-white font-bold break-all leading-relaxed mb-2\">{hoveredNode.id}</p>
+          <p className="text-[10px] sm:text-[11px] mono text-white font-bold break-all leading-relaxed mb-2">{hoveredNode.id}</p>
           
           {/* Show balance for wallet nodes */}
           {(hoveredNode.details?.balance || hoveredNode.details?.current_balance) && (

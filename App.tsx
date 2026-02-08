@@ -183,10 +183,13 @@ const App: React.FC = () => {
     console.log(`Expanding ${type} node: ${nodeId.substring(0, 12)}... (depth: ${currentDepth}/${maxDepth}, force: ${force}, isRoot: ${isRootNode})`);
 
     try {
+      if (scanAborted) return;
+      
       if (type === 'address' || type === 'eth_address') {
         // Enhanced transaction data collection with retries
         let txs, detailedAddressInfo;
         try {
+          if (scanAborted) return;
           [txs, detailedAddressInfo] = await Promise.all([
             blockchainService.getAddressTxs(nodeId).catch(async e => {
               console.warn(`First attempt failed for ${nodeId}:`, e);
@@ -224,6 +227,7 @@ const App: React.FC = () => {
         for (const tx of targetTxs) {
           if (scanAborted) break;
           try {
+            if (scanAborted) break;
             const totalOut = (tx.vout || []).reduce((sum, v) => sum + (v.value || 0), 0);
             const totalIn = (tx.vin || []).reduce((sum, v) => sum + (v.prevout?.value || 0), 0);
             const amtString = isEth ? (totalOut / 1e18).toFixed(6) : (totalOut / 1e8).toFixed(6);
@@ -268,12 +272,14 @@ const App: React.FC = () => {
               }
             };
             
+            if (scanAborted) break;
             addNode(txNode);
             addLink({ source: nodeId, target: txNode.id, value: 2, label: `${amtString} ${unit}` });
             
             // Deep scan: expand transactions to show connected addresses only if within depth limit
-            // Only expand if we haven't reached max depth (for level 2 depth: expand at level 0 only)
-            if (force && isRootNode && currentDepth < maxDepth && !scanAborted) {
+            // Expand if we're doing a deep scan (force or from root scan) and haven't reached max depth
+            if (scanAborted) break;
+            if ((force || rootScanId) && currentDepth < maxDepth && !scanAborted) {
               await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, false, rootScanId, false);
             }
           } catch (e) {
@@ -283,12 +289,14 @@ const App: React.FC = () => {
         }
       } else if (type === 'transaction') {
         try {
+          if (scanAborted) return;
           const txData = await blockchainService.getTransaction(nodeId).catch(e => {
             console.warn(`Transaction fetch failed for ${nodeId}:`, e);
             return null;
           });
           
           if (txData) {
+            if (scanAborted) return;
             // For root node with deep scan, get ALL inputs/outputs
             // For other nodes, use normal limits
             // For initial query, keep it minimal
@@ -307,15 +315,19 @@ const App: React.FC = () => {
                   label: `${addr.substring(0, 12)}...`,
                   details: { address: addr, role: 'SENDER/INPUT', flow: valStr }
                 };
+                if (scanAborted) break;
                 addNode(inNode);
                 addLink({ source: addr, target: nodeId, value: 1, label: valStr });
-                // Deep scan: only expand addresses if within depth limit (don't expand beyond level 2)
-                if (currentDepth + 1 < maxDepth && !scanAborted) {
+                // Deep scan: expand addresses if within depth limit and part of a deep scan
+                if (scanAborted) break;
+                if ((force || rootScanId) && currentDepth + 1 < maxDepth && !scanAborted) {
                   await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, false, rootScanId, false);
                 }
               }
             }
 
+            if (scanAborted) return;
+            
             for (const out of (txData.vout || []).slice(0, limit)) {
               if (scanAborted) break;
               const addr = out.scriptpubkey_address;
@@ -328,10 +340,12 @@ const App: React.FC = () => {
                   label: `${addr.substring(0, 12)}...`,
                   details: { address: addr, role: 'RECEIVER/OUTPUT', flow: valStr }
                 };
+                if (scanAborted) break;
                 addNode(outNode);
                 addLink({ source: nodeId, target: addr, value: 1, label: valStr });
-                // Deep scan: only expand addresses if within depth limit (don't expand beyond level 2)
-                if (currentDepth + 1 < maxDepth && !scanAborted) {
+                // Deep scan: expand addresses if within depth limit and part of a deep scan
+                if (scanAborted) break;
+                if ((force || rootScanId) && currentDepth + 1 < maxDepth && !scanAborted) {
                   await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, false, rootScanId, false);
                 }
               }
@@ -352,7 +366,8 @@ const App: React.FC = () => {
     if (!selectedNode) return;
     
     if (deepLoading) {
-      // Stop the scan
+      // Stop the scan immediately
+      console.log(`Manually stopping deep scan on node: ${scanningNodeId?.substring(0, 12) || 'unknown'}...`);
       setScanAborted(true);
       setDeepLoading(false);
       setScanningNodeId(null);

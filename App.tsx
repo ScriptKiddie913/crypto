@@ -271,13 +271,9 @@ const App: React.FC = () => {
             addNode(txNode);
             addLink({ source: nodeId, target: txNode.id, value: 2, label: `${amtString} ${unit}` });
             
-            // For root node deep scan, expand transaction to get connected addresses (depth 1 only)
-            // For normal nodes, respect depth limits and always expand when within depth
-            if (isRootNode && force && currentDepth === 0) {
-              // Root deep scan: expand transactions to show connected addresses
-              await expandNode(txNode.id, 'transaction', 1, 0, false, rootScanId, false);
-            } else if (currentDepth + 1 <= maxDepth && !scanAborted) {
-              // Normal expansion for non-root nodes
+            // Deep scan: expand transactions to show connected addresses only if within depth limit
+            // Only expand if we haven't reached max depth (for level 2 depth: expand at level 0 only)
+            if (force && isRootNode && currentDepth < maxDepth && !scanAborted) {
               await expandNode(txNode.id, 'transaction', maxDepth, currentDepth + 1, false, rootScanId, false);
             }
           } catch (e) {
@@ -313,9 +309,8 @@ const App: React.FC = () => {
                 };
                 addNode(inNode);
                 addLink({ source: addr, target: nodeId, value: 1, label: valStr });
-                // For root node deep scan, don't expand sender addresses further
-                // For normal nodes, respect depth limits and always expand when within depth
-                if (!isRootNode && currentDepth + 1 <= maxDepth && !scanAborted) {
+                // Deep scan: only expand addresses if within depth limit (don't expand beyond level 2)
+                if (currentDepth + 1 < maxDepth && !scanAborted) {
                   await expandNode(addr, inNode.type, maxDepth, currentDepth + 1, false, rootScanId, false);
                 }
               }
@@ -335,9 +330,8 @@ const App: React.FC = () => {
                 };
                 addNode(outNode);
                 addLink({ source: nodeId, target: addr, value: 1, label: valStr });
-                // For root node deep scan, don't expand receiver addresses further
-                // For normal nodes, respect depth limits
-                if (!isRootNode && currentDepth < maxDepth && !scanAborted) {
+                // Deep scan: only expand addresses if within depth limit (don't expand beyond level 2)
+                if (currentDepth + 1 < maxDepth && !scanAborted) {
                   await expandNode(addr, outNode.type, maxDepth, currentDepth + 1, false, rootScanId, false);
                 }
               }
@@ -370,14 +364,12 @@ const App: React.FC = () => {
     setError(null);
     
     try {
-      const isRoot = selectedNode.isRoot || false;
+      // Deep scan only on the selected node: get direct connections (level 1) and their direct connections (level 2)
+      // Always use depth 2 for deep scan, regardless of node type
+      const depth = 2;
       
-      // For root nodes: get all direct connections (special behavior)
-      // For normal nodes: cap at depth 3 maximum (selected → connected → sub-connected)
-      const depth = isRoot ? (hyperMode ? 8 : Math.max(scanDepth, 3)) : 3;
-      
-      console.log(`Starting DEEP scan on ${selectedNode.type} (${selectedNode.id.substring(0, 12)}...) with depth: ${depth}, isRoot: ${isRoot}`);
-      await expandNode(selectedNode.id, selectedNode.type, depth, 0, true, selectedNode.id, isRoot);
+      console.log(`Starting DEEP scan on ${selectedNode.type} (${selectedNode.id.substring(0, 12)}...) with depth: ${depth}`);
+      await expandNode(selectedNode.id, selectedNode.type, depth, 0, true, selectedNode.id, true);
       console.log(`DEEP scan completed for ${selectedNode.id.substring(0, 12)}...`);
     } catch (err) {
       console.error('Deep scan error:', err);
@@ -799,105 +791,12 @@ const App: React.FC = () => {
       y += 50;
     }
 
-    // Enhanced Risk Assessment Section
-    if (y > 220) { doc.addPage(); y = 20; }
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(5, 7, 12);
-    doc.text('2. COMPREHENSIVE RISK ASSESSMENT', 15, y);
-    doc.line(15, y + 2, 195, y + 2);
-    y += 15;
-
-    const riskNodes = nodes.filter(n => n.type === 'address' || n.type === 'eth_address' || n.isRoot);
-    let highRiskCount = 0;
-    let mediumRiskCount = 0;
-    let lowRiskCount = 0;
-    
-    riskNodes.forEach(node => {
-      const risk = node.riskScore ?? node.details?.threat_risk ?? 0;
-      if (risk >= 70) highRiskCount++;
-      else if (risk >= 30) mediumRiskCount++;
-      else lowRiskCount++;
-    });
-
-    // Risk Summary Stats
-    doc.setFillColor(239, 68, 68, 0.1);
-    doc.rect(15, y, 55, 25, 'F');
-    doc.setTextColor(239, 68, 68);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${highRiskCount}`, 35, y + 10);
-    doc.setFontSize(10);
-    doc.text('HIGH RISK', 25, y + 18);
-
-    doc.setFillColor(255, 193, 7, 0.1);
-    doc.rect(75, y, 55, 25, 'F');
-    doc.setTextColor(255, 193, 7);
-    doc.setFontSize(14);
-    doc.text(`${mediumRiskCount}`, 95, y + 10);
-    doc.setFontSize(10);
-    doc.text('MEDIUM RISK', 85, y + 18);
-
-    doc.setFillColor(16, 185, 129, 0.1);
-    doc.rect(135, y, 55, 25, 'F');
-    doc.setTextColor(16, 185, 129);
-    doc.setFontSize(14);
-    doc.text(`${lowRiskCount}`, 155, y + 10);
-    doc.setFontSize(10);
-    doc.text('LOW RISK', 148, y + 18);
-    y += 35;
-
-    // Detailed Risk Analysis with Currency Info
-    riskNodes.forEach((node, index) => {
-      if (y > 240) { doc.addPage(); y = 20; }
-      const risk = node.riskScore ?? node.details?.threat_risk ?? 0;
-      const currency = node.type === 'eth_address' ? 'ETH' : 
-                       node.type === 'address' ? 'BTC' : 
-                       node.details?.balance?.includes('BTC') ? 'BTC' : 
-                       node.details?.balance?.includes('ETH') ? 'ETH' : 'UNKNOWN';
-      const network = node.type === 'eth_address' ? 'Ethereum' : 
-                      node.type === 'address' ? 'Bitcoin' : 
-                      node.details?.network_type || 'UNKNOWN';
-      
-      doc.setFillColor(250, 250, 250);
-      doc.rect(15, y - 5, 180, 45, 'F');
-      
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(5, 7, 12);
-      const addressLine = doc.splitTextToSize(`${index + 1}. ${node.id}`, 160);
-      doc.text(addressLine[0], 20, y + 5);
-      
-      doc.setTextColor(risk > 70 ? 239 : risk > 30 ? 255 : 16, risk > 70 ? 68 : risk > 30 ? 193 : 185, risk > 70 ? 68 : risk > 30 ? 7 : 129);
-      doc.text(`RISK: ${risk}/100`, 150, y + 5);
-      
-      doc.setFontSize(8);
-      doc.setTextColor(75, 85, 99);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`TYPE: ${node.details?.entity_type || node.type || 'UNKNOWN'} | LABEL: ${node.details?.clustering_label || 'IDENTIFIED'}`, 20, y + 12);
-      doc.text(`CURRENCY: ${currency} | NETWORK: ${network}`, 20, y + 18);
-      if (node.details?.total_received) {
-        doc.text(`RECEIVED: ${node.details.total_received} | SENT: ${node.details.total_sent || '0'}`, 20, y + 24);
-      }
-      if (node.details?.balance || node.details?.current_balance) {
-        doc.setTextColor(16, 185, 129);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`BALANCE: ${node.details.balance || node.details.current_balance}`, 20, y + 30);
-      }
-      if (node.details?.transaction_count) {
-        doc.setTextColor(75, 85, 99);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`TX COUNT: ${node.details.transaction_count}`, 20, y + 36);
-      }
-      y += 50;
-    });
-
     // Enhanced OSINT Intelligence Section
     if (y > 200) { doc.addPage(); y = 20; }
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('3. COMPREHENSIVE OSINT & SOCIAL INTELLIGENCE', 15, y);
+    doc.text('2. COMPREHENSIVE OSINT & SOCIAL INTELLIGENCE', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 
@@ -963,7 +862,7 @@ const App: React.FC = () => {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('4. TRANSACTION FLOW & DETAILED RISK ANALYSIS', 15, y);
+    doc.text('3. TRANSACTION FLOW & DETAILED RISK ANALYSIS', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 
@@ -1096,7 +995,7 @@ const App: React.FC = () => {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('5. COMPREHENSIVE WALLET ADDRESS CATALOG', 15, y);
+    doc.text('4. COMPREHENSIVE WALLET ADDRESS CATALOG', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 
@@ -1174,7 +1073,7 @@ const App: React.FC = () => {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 7, 12);
-    doc.text('6. TECHNICAL APPENDIX', 15, y);
+    doc.text('5. TECHNICAL APPENDIX', 15, y);
     doc.line(15, y + 2, 195, y + 2);
     y += 15;
 

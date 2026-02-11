@@ -26,7 +26,7 @@
 
 ---
 
-## 🎯 MISSION OVERVIEW
+## 🎯 PROJECT OVERVIEW
 
 **SOTANIK_AI** is a cutting-edge forensic intelligence platform designed for cryptocurrency investigators, blockchain analysts, and digital asset researchers. Built with zero external API dependencies, this system provides real-time cross-chain analysis, deep transaction tracing, and comprehensive OSINT attribution capabilities.
 

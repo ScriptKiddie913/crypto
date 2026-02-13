@@ -287,6 +287,43 @@ const TransactionGraph: React.FC<Props> = ({ nodes, links, onNodeClick, selected
           </div>
           <p className="text-[10px] sm:text-[11px] mono text-white font-bold break-all leading-relaxed mb-2">{hoveredNode.id}</p>
           
+          {/* Show wallet identification for address nodes */}
+          {(hoveredNode.type === 'address' || hoveredNode.type === 'eth_address') && (hoveredNode.walletInfo || hoveredNode.details?.wallet_blockchain) && (
+            <div className="space-y-1 mb-2">
+              {(hoveredNode.walletInfo?.blockchain || hoveredNode.details?.wallet_blockchain) && (
+                <div className="p-1.5 sm:p-2 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <div className="text-[6px] text-purple-400 font-bold uppercase">BLOCKCHAIN</div>
+                  <div className="text-[9px] sm:text-[10px] font-bold text-purple-300">
+                    {hoveredNode.walletInfo?.blockchain || hoveredNode.details?.wallet_blockchain}
+                  </div>
+                </div>
+              )}
+              
+              {(hoveredNode.walletInfo?.walletBrand || hoveredNode.details?.wallet_brand) && (
+                <div className="p-1.5 sm:p-2 bg-pink-500/10 border border-pink-500/20 rounded-lg">
+                  <div className="text-[6px] text-pink-400 font-bold uppercase">WALLET</div>
+                  <div className="text-[9px] sm:text-[10px] font-bold text-pink-300">
+                    {hoveredNode.walletInfo?.walletBrand || hoveredNode.details?.wallet_brand}
+                  </div>
+                  {(hoveredNode.walletInfo?.walletCategory || hoveredNode.details?.wallet_category) && (
+                    <div className="text-[6px] text-pink-300/60 mt-0.5">
+                      {hoveredNode.walletInfo?.walletCategory || hoveredNode.details?.wallet_category}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {(hoveredNode.walletInfo?.walletType || hoveredNode.details?.wallet_type) && (
+                <div className="p-1.5 sm:p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="text-[6px] text-blue-400 font-bold uppercase">TYPE</div>
+                  <div className="text-[9px] sm:text-[10px] font-bold text-blue-300">
+                    {hoveredNode.walletInfo?.walletType || hoveredNode.details?.wallet_type}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
           {/* Show balance for wallet nodes */}
           {(hoveredNode.details?.balance || hoveredNode.details?.current_balance) && (
             <div className="p-1.5 sm:p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-2">

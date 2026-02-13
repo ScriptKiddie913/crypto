@@ -309,11 +309,25 @@ const App: React.FC = () => {
               if (addr) {
                 const val = input.prevout?.value || 0;
                 const valStr = `${isEth ? (val/1e18).toFixed(6) : (val/1e8).toFixed(6)} ${unit}`;
+                
+                // Identify wallet for input address
+                const walletInfo = blockchainService.identifyWallet(addr);
+                
                 const inNode: NodeData = {
                   id: addr,
                   type: addr.toLowerCase().startsWith('0x') ? 'eth_address' : 'address',
                   label: `${addr.substring(0, 12)}...`,
-                  details: { address: addr, role: 'SENDER/INPUT', flow: valStr }
+                  walletInfo: walletInfo,
+                  details: { 
+                    address: addr, 
+                    role: 'SENDER/INPUT', 
+                    flow: valStr,
+                    wallet_blockchain: walletInfo.blockchain,
+                    wallet_type: walletInfo.walletType,
+                    wallet_category: walletInfo.walletCategory,
+                    wallet_brand: walletInfo.walletBrand,
+                    wallet_confidence: `${(walletInfo.confidence * 100).toFixed(0)}%`
+                  }
                 };
                 if (scanAborted) break;
                 addNode(inNode);
@@ -334,11 +348,25 @@ const App: React.FC = () => {
               if (addr) {
                 const val = out.value || 0;
                 const valStr = `${isEth ? (val/1e18).toFixed(6) : (val/1e8).toFixed(6)} ${unit}`;
+                
+                // Identify wallet for output address
+                const walletInfo = blockchainService.identifyWallet(addr);
+                
                 const outNode: NodeData = {
                   id: addr,
                   type: addr.toLowerCase().startsWith('0x') ? 'eth_address' : 'address',
                   label: `${addr.substring(0, 12)}...`,
-                  details: { address: addr, role: 'RECEIVER/OUTPUT', flow: valStr }
+                  walletInfo: walletInfo,
+                  details: { 
+                    address: addr, 
+                    role: 'RECEIVER/OUTPUT', 
+                    flow: valStr,
+                    wallet_blockchain: walletInfo.blockchain,
+                    wallet_type: walletInfo.walletType,
+                    wallet_category: walletInfo.walletCategory,
+                    wallet_brand: walletInfo.walletBrand,
+                    wallet_confidence: `${(walletInfo.confidence * 100).toFixed(0)}%`
+                  }
                 };
                 if (scanAborted) break;
                 addNode(outNode);
@@ -1028,8 +1056,15 @@ const App: React.FC = () => {
       const txCount = wallet.details?.transaction_count || 0;
       const risk = wallet.riskScore ?? wallet.details?.threat_risk ?? 0;
       
+      // Extract wallet identification information
+      const walletBlockchain = wallet.walletInfo?.blockchain || wallet.details?.wallet_blockchain || network;
+      const walletType = wallet.walletInfo?.walletType || wallet.details?.wallet_type || 'Unknown';
+      const walletCategory = wallet.walletInfo?.walletCategory || wallet.details?.wallet_category || 'Unknown';
+      const walletBrand = wallet.walletInfo?.walletBrand || wallet.details?.wallet_brand || 'Unidentified';
+      const walletConfidence = wallet.walletInfo?.confidence ? `${(wallet.walletInfo.confidence * 100).toFixed(0)}%` : wallet.details?.wallet_confidence || 'N/A';
+      
       doc.setFillColor(248, 250, 252);
-      doc.rect(15, y - 5, 180, 55, 'F');
+      doc.rect(15, y - 5, 180, 75, 'F');
       
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
@@ -1043,6 +1078,28 @@ const App: React.FC = () => {
       const walletIdLines = doc.splitTextToSize(wallet.id, 170);
       doc.text(walletIdLines.slice(0, 2), 20, y);
       y += (Math.min(walletIdLines.length, 2) * 4) + 3;
+      
+      // Wallet Type Information
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(139, 92, 246);
+      doc.setFontSize(7);
+      doc.text(`BLOCKCHAIN: ${walletBlockchain}`, 20, y);
+      doc.setTextColor(16, 185, 129);
+      doc.text(`TYPE: ${walletType}`, 80, y);
+      y += 5;
+      
+      doc.setTextColor(59, 130, 246);
+      doc.text(`CATEGORY: ${walletCategory}`, 20, y);
+      y += 5;
+      
+      if (walletBrand !== 'Unidentified') {
+        doc.setTextColor(236, 72, 153);
+        doc.text(`BRAND: ${walletBrand}`, 20, y);
+        doc.setTextColor(100, 116, 139);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`CONFIDENCE: ${walletConfidence}`, 100, y);
+        y += 5;
+      }
       
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(75, 85, 99);
@@ -1165,6 +1222,10 @@ const App: React.FC = () => {
           blockchainService.getAddressTxs(val).catch(e => { console.error('Transactions fetch error:', e); return []; })
         ]);
         
+        // Identify wallet type
+        const walletIdentification = blockchainService.identifyWallet(val, recentTxs, detailedInfo);
+        console.log('Wallet identification:', walletIdentification);
+        
         // Calculate comprehensive address statistics with proper error handling
         const stats = {
           total_received: addrData ? (isEth ? (addrData.chain_stats.funded_txo_sum/1e18).toFixed(8) : (addrData.chain_stats.funded_txo_sum/1e8).toFixed(8)) : "0",
@@ -1180,11 +1241,12 @@ const App: React.FC = () => {
         
         console.log('Address statistics:', stats);
         
-        // Enhanced root node with comprehensive data
+        // Enhanced root node with comprehensive data including wallet identification
         addNode({ 
           ...root,
           label: clustering?.clustering_label || `${val.substring(0, 14)}...`,
           riskScore: clustering?.threat_risk || 0,
+          walletInfo: walletIdentification,
           details: { 
             ...root.details, 
             ...clustering, 
@@ -1194,7 +1256,13 @@ const App: React.FC = () => {
             total_received: `${stats.total_received} ${unit}`,
             total_sent: `${stats.total_sent} ${unit}`,
             network_type: isEth ? 'Ethereum' : 'Bitcoin',
-            address_analysis: 'COMPREHENSIVE_SCAN_COMPLETED'
+            address_analysis: 'COMPREHENSIVE_SCAN_COMPLETED',
+            // Include wallet identification in details for easy access
+            wallet_blockchain: walletIdentification.blockchain,
+            wallet_type: walletIdentification.walletType,
+            wallet_category: walletIdentification.walletCategory,
+            wallet_brand: walletIdentification.walletBrand,
+            wallet_confidence: `${(walletIdentification.confidence * 100).toFixed(0)}%`
           }
         });
 
@@ -1658,6 +1726,68 @@ const App: React.FC = () => {
                       <div className="text-sm font-bold text-emerald-300">{selectedNode.details.balance || selectedNode.details.current_balance}</div>
                       {selectedNode.details?.network_type && (
                         <div className="text-[6px] text-emerald-400/60 mt-1">NETWORK: {selectedNode.details.network_type}</div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Wallet Identification Section */}
+                  {(selectedNode.type === 'address' || selectedNode.type === 'eth_address') && (selectedNode.walletInfo || selectedNode.details?.wallet_blockchain) && (
+                    <div className="space-y-2">
+                      <div className="text-[7px] uppercase tracking-wide text-purple-400 font-bold flex items-center gap-1">
+                        🔐 WALLET IDENTIFICATION
+                      </div>
+                      
+                      {/* Blockchain Type */}
+                      {(selectedNode.walletInfo?.blockchain || selectedNode.details?.wallet_blockchain) && (
+                        <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-2">
+                          <div className="text-[6px] text-purple-300 font-bold uppercase mb-1">BLOCKCHAIN</div>
+                          <div className="text-[10px] font-bold text-purple-200">
+                            {selectedNode.walletInfo?.blockchain || selectedNode.details?.wallet_blockchain}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Wallet Type & Category in grid */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {(selectedNode.walletInfo?.walletType || selectedNode.details?.wallet_type) && (
+                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2">
+                            <div className="text-[6px] text-blue-300 font-bold uppercase mb-1">TYPE</div>
+                            <div className="text-[9px] font-bold text-blue-200">
+                              {selectedNode.walletInfo?.walletType || selectedNode.details?.wallet_type}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {(selectedNode.walletInfo?.walletCategory || selectedNode.details?.wallet_category) && (
+                          <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-2">
+                            <div className="text-[6px] text-cyan-300 font-bold uppercase mb-1">CATEGORY</div>
+                            <div className="text-[9px] font-bold text-cyan-200 leading-tight">
+                              {selectedNode.walletInfo?.walletCategory || selectedNode.details?.wallet_category}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Wallet Brand (if identified) */}
+                      {(selectedNode.walletInfo?.walletBrand || selectedNode.details?.wallet_brand) && (
+                        <div className="bg-pink-500/10 border border-pink-500/20 rounded-lg p-2">
+                          <div className="text-[6px] text-pink-300 font-bold uppercase mb-1">WALLET BRAND</div>
+                          <div className="text-[10px] font-bold text-pink-200">
+                            {selectedNode.walletInfo?.walletBrand || selectedNode.details?.wallet_brand}
+                          </div>
+                          {(selectedNode.walletInfo?.confidence || selectedNode.details?.wallet_confidence) && (
+                            <div className="text-[6px] text-pink-300/60 mt-1">
+                              Confidence: {selectedNode.walletInfo ? `${(selectedNode.walletInfo.confidence * 100).toFixed(0)}%` : selectedNode.details?.wallet_confidence}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Detection Method */}
+                      {selectedNode.walletInfo?.detectionMethod && (
+                        <div className="text-[6px] text-slate-400 italic">
+                          Detected via: {selectedNode.walletInfo.detectionMethod}
+                        </div>
                       )}
                     </div>
                   )}

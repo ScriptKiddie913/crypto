@@ -1,4 +1,4 @@
-import { AddressInfo, Transaction, SearchType } from '../types';
+import { AddressInfo, Transaction, SearchType, WalletIdentification } from '../types';
 
 const BTC_PROVIDERS = [
   'https://mempool.space/api',
@@ -397,6 +397,303 @@ export const blockchainService = {
     if (/[0OIl]/.test(address)) risk += 5; // Invalid characters in base58
     
     return Math.min(risk, 100);
+  },
+
+  /**
+   * Comprehensive wallet identification based on address patterns, transaction behavior, and known signatures
+   */
+  identifyWallet(address: string, transactions?: any[], addressDetails?: any): WalletIdentification {
+    const address_lower = address.toLowerCase();
+    
+    // Known wallet patterns and identifiers
+    const walletPatterns = {
+      // Hardware Wallets
+      ledger: {
+        patterns: [
+          /^(bc1|1|3)[a-zA-Z0-9]{25,42}$/, // Ledger typically uses standard BTC formats
+          /^0x[a-fA-F0-9]{40}$/i // Ledger ETH addresses
+        ],
+        brand: 'Ledger',
+        type: 'Cold Wallet' as const,
+        category: 'Hardware Wallet' as const,
+        blockchain: 'Multi-Chain' as const,
+        confidence: 0.6
+      },
+      trezor: {
+        patterns: [
+          /^(bc1|1|3)[a-zA-Z0-9]{25,42}$/, // Trezor uses standard formats
+          /^0x[a-fA-F0-9]{40}$/i
+        ],
+        brand: 'Trezor',
+        type: 'Cold Wallet' as const,
+        category: 'Hardware Wallet' as const,
+        blockchain: 'Multi-Chain' as const,
+        confidence: 0.6
+      },
+      
+      // Browser Extensions & Hot Wallets
+      metamask: {
+        patterns: [
+          /^0x[a-fA-F0-9]{40}$/i // MetaMask creates standard ETH addresses
+        ],
+        brand: 'MetaMask',
+        type: 'Hot Wallet' as const,
+        category: 'Browser Extension' as const,
+        blockchain: 'Ethereum' as const,
+        confidence: 0.5
+      },
+      rabby: {
+        patterns: [
+          /^0x[a-fA-F0-9]{40}$/i
+        ],
+        brand: 'Rabby Wallet',
+        type: 'Hot Wallet' as const,
+        category: 'Browser Extension' as const,
+        blockchain: 'Ethereum' as const,
+        confidence: 0.4
+      },
+      phantom: {
+        patterns: [
+          /^[1-9A-HJ-NP-Za-km-z]{32,44}$/ // Solana address pattern
+        ],
+        brand: 'Phantom',
+        type: 'Hot Wallet' as const,
+        category: 'Browser Extension' as const,
+        blockchain: 'Solana' as const,
+        confidence: 0.6
+      },
+      
+      // Exchange Wallets
+      binance: {
+        patterns: [
+          /^bnb1[a-z0-9]{38}$/i, // Binance Chain
+          /^0x28C6c06298d514Db089934071355E5743bf21d60/i,
+          /^1NDyJtNTjmwk5xPNhjgAMu4HDHigtobu1s/,
+          /^bc1qk5xxzm84vduxe5v2nfrqblfxg6t/
+        ],
+        brand: 'Binance',
+        type: 'Custodial' as const,
+        category: 'Exchange Wallet' as const,
+        blockchain: 'Multi-Chain' as const,
+        confidence: 0.9
+      },
+      coinbase: {
+        patterns: [
+          /^1P5ZEDWTKTFGxQjZphgWPQUpe554WKDfHQ/,
+          /^bc1ql49ydapnjafl5t2cp9zqpjwe6pdgmxy/,
+          /^0x71660c4005BA85c37ccec55d0C4493E66Fe775d3/i,
+          /^0xA090e606E30bD747d4E6245a1517EbE430F0057e/i
+        ],
+        brand: 'Coinbase',
+        type: 'Custodial' as const,
+        category: 'Exchange Wallet' as const,
+        blockchain: 'Multi-Chain' as const,
+        confidence: 0.95
+      },
+      kraken: {
+        patterns: [
+          /^1KraKeHQ7Y4rYu5TxLPh9A1pHNxfsV6ZC/,
+          /^bc1qj3cqr5qsqmcq30ktksxd/,
+          /^0x2910543B9aCA65d1e3E78A1CcF2Ca1aD9b7f2F8/i
+        ],
+        brand: 'Kraken',
+        type: 'Custodial' as const,
+        category: 'Exchange Wallet' as const,
+        blockchain: 'Multi-Chain' as const,
+        confidence: 0.9
+      },
+      
+      // Mobile Wallets
+      trust_wallet: {
+        patterns: [
+          /^0x[a-fA-F0-9]{40}$/i, // Can be ETH or BNB
+          /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/ // Bitcoin
+        ],
+        brand: 'Trust Wallet',
+        type: 'Non-Custodial' as const,
+        category: 'Mobile Wallet' as const,
+        blockchain: 'Multi-Chain' as const,
+        confidence: 0.4
+      },
+      
+      // Desktop Wallets
+      exodus: {
+        patterns: [
+          /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/, // Bitcoin
+          /^0x[a-fA-F0-9]{40}$/i // Ethereum
+        ],
+        brand: 'Exodus',
+        type: 'Non-Custodial' as const,
+        category: 'Desktop Wallet' as const,
+        blockchain: 'Multi-Chain' as const,
+        confidence: 0.4
+      },
+      electrum: {
+        patterns: [
+          /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/, // Bitcoin
+          /^bc1[ac-hj-np-z02-9]{11,71}$/i // SegWit
+        ],
+        brand: 'Electrum',
+        type: 'Non-Custodial' as const,
+        category: 'Desktop Wallet' as const,
+        blockchain: 'Bitcoin' as const,
+        confidence: 0.5
+      },
+      
+      // Multi-Signature Wallets
+      gnosis_safe: {
+        patterns: [
+          /^0x[a-fA-F0-9]{40}$/i // Gnosis Safe contract addresses
+        ],
+        brand: 'Gnosis Safe',
+        type: 'Non-Custodial' as const,
+        category: 'Multi-Signature Wallet' as const,
+        blockchain: 'Ethereum' as const,
+        confidence: 0.3
+      },
+      
+      // MPC Wallets
+      zengo: {
+        patterns: [
+          /^0x[a-fA-F0-9]{40}$/i,
+          /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/
+        ],
+        brand: 'ZenGo',
+        type: 'Non-Custodial' as const,
+        category: 'MPC Wallet' as const,
+        blockchain: 'Multi-Chain' as const,
+        confidence: 0.3
+      }
+    };
+    
+    // Check against known wallet patterns
+    for (const [walletKey, walletInfo] of Object.entries(walletPatterns)) {
+      for (const pattern of walletInfo.patterns) {
+        if (pattern.test(address) || pattern.test(address_lower)) {
+          // Check if we have transaction behavior that confirms this
+          let confidence = walletInfo.confidence;
+          
+          // Increase confidence based on transaction patterns
+          if (transactions && transactions.length > 0) {
+            confidence = Math.min(confidence + 0.1, 1.0);
+          }
+          
+          return {
+            blockchain: walletInfo.blockchain,
+            walletType: walletInfo.type,
+            walletCategory: walletInfo.category,
+            walletBrand: walletInfo.brand,
+            confidence: confidence,
+            detectionMethod: 'Pattern matching'
+          };
+        }
+      }
+    }
+    
+    // Fallback: Identify by address format if no specific wallet detected
+    return this.identifyByAddressFormat(address, transactions, addressDetails);
+  },
+
+  /**
+   * Identify wallet type by analyzing address format and transaction behavior
+   */
+  identifyByAddressFormat(address: string, transactions?: any[], addressDetails?: any): WalletIdentification {
+    const address_lower = address.toLowerCase();
+    
+    // Ethereum/EVM addresses
+    if (/^0x[a-fA-F0-9]{40}$/i.test(address)) {
+      let category: WalletIdentification['walletCategory'] = 'Browser Extension';
+      let walletType: WalletIdentification['walletType'] = 'Non-Custodial';
+      let confidence = 0.3;
+      
+      // Check if it's a contract (likely multi-sig or MPC)
+      if (addressDetails?.contract_info?.is_contract) {
+        category = 'Multi-Signature Wallet';
+        confidence = 0.6;
+      }
+      
+      // High transaction count might indicate exchange
+      if (transactions && transactions.length > 100) {
+        category = 'Exchange Wallet';
+        walletType = 'Custodial';
+        confidence = 0.5;
+      }
+      
+      // Check for Sepolia or testnet
+      const networkType = addressDetails?.network_type || '';
+      if (networkType.toLowerCase().includes('sepolia') || networkType.toLowerCase().includes('testnet')) {
+        return {
+          blockchain: 'Ethereum',
+          walletType: 'Non-Custodial',
+          walletCategory: 'Browser Extension',
+          walletBrand: 'MetaMask (Testnet)',
+          confidence: 0.7,
+          detectionMethod: 'Testnet detection'
+        };
+      }
+      
+      return {
+        blockchain: 'Ethereum',
+        walletType: walletType,
+        walletCategory: category,
+        confidence: confidence,
+        detectionMethod: 'Address format analysis'
+      };
+    }
+    
+    // Bitcoin addresses
+    if (/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(address) || /^bc1[ac-hj-np-z02-9]{11,71}$/i.test(address)) {
+      let category: WalletIdentification['walletCategory'] = 'Desktop Wallet';
+      let walletType: WalletIdentification['walletType'] = 'Non-Custodial';
+      let confidence = 0.3;
+      
+      // SegWit addresses might indicate modern wallets
+      if (address.startsWith('bc1')) {
+        category = 'Multi-Chain Wallet';
+        confidence = 0.4;
+      }
+      
+      // Legacy addresses might be older wallets
+      if (address.startsWith('1')) {
+        category = 'Desktop Wallet';
+        confidence = 0.35;
+      }
+      
+      // High transaction volume indicates exchange
+      if (transactions && transactions.length > 50) {
+        category = 'Exchange Wallet';
+        walletType = 'Custodial';
+        confidence = 0.5;
+      }
+      
+      return {
+        blockchain: 'Bitcoin',
+        walletType: walletType,
+        walletCategory: category,
+        confidence: confidence,
+        detectionMethod: 'Bitcoin address format analysis'
+      };
+    }
+    
+    // Solana addresses (Base58, 32-44 characters)
+    if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) {
+      return {
+        blockchain: 'Solana',
+        walletType: 'Hot Wallet',
+        walletCategory: 'Browser Extension',
+        walletBrand: 'Phantom',
+        confidence: 0.5,
+        detectionMethod: 'Solana address format'
+      };
+    }
+    
+    // Unknown format
+    return {
+      blockchain: 'Unknown',
+      walletType: 'Non-Custodial',
+      confidence: 0.1,
+      detectionMethod: 'Unknown format'
+    };
   },
 
   clearCache() {

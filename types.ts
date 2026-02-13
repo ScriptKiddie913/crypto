@@ -44,6 +44,15 @@ export interface AddressInfo {
   };
 }
 
+export interface WalletIdentification {
+  blockchain: 'Bitcoin' | 'Ethereum' | 'Solana' | 'Multi-Chain' | 'Unknown';
+  walletType?: 'Hot Wallet' | 'Cold Wallet' | 'Custodial' | 'Non-Custodial';
+  walletCategory?: 'Mobile Wallet' | 'Desktop Wallet' | 'Browser Extension' | 'Exchange Wallet' | 'Hardware Wallet' | 'Paper Wallet' | 'Multi-Chain Wallet' | 'Multi-Signature Wallet' | 'MPC Wallet';
+  walletBrand?: string; // e.g., 'MetaMask', 'Ledger', 'Trezor', etc.
+  confidence: number; // 0-1
+  detectionMethod?: string;
+}
+
 export interface NodeData {
   id: string;
   type: 'address' | 'transaction' | 'block' | 'eth_address' | 'entity' | 'social' | 'github' | 'osint_confirmed';
@@ -51,6 +60,7 @@ export interface NodeData {
   details?: any;
   riskScore?: number;
   isRoot?: boolean;
+  walletInfo?: WalletIdentification;
 }
 
 export interface LinkData {
